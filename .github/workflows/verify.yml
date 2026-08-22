@@ -55,6 +55,22 @@ jobs:
           done
           exit $fail
 
+      - name: No Control Center page prints a credential
+        run: |
+          # The Control Center is unauthenticated by design, so it must never render
+          # a token, not even the shipped default. Examples reference $VO_TOKEN.
+          fail=0
+          for u in / /asset /spine /lenses /lenses/grc /org /groundtruth /scenario \
+                   "/manual?ch=overview" "/manual?ch=connect" "/manual?ch=api" \
+                   "/manual?ch=model" "/manual?ch=reach" "/manual?ch=gaps" \
+                   "/manual?ch=correlate" "/manual?ch=scoring"; do
+            if curl -s "localhost:3000$u" | grep -q "vo-dev-token"; then
+              echo "FAIL $u renders a literal token"; fail=1
+            fi
+          done
+          [ $fail = 0 ] && echo "no page renders a credential"
+          exit $fail
+
       - name: The chaos profile serves the happy path
         run: |
           docker compose --profile chaos up -d wiremock

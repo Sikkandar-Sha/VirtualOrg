@@ -48,13 +48,10 @@ def world_now():
     return dt.datetime.combine(d, dt.time(9, 0), tzinfo=dt.timezone.utc), meta
 
 
-def _shown_token():
-    """The Control Center is unauthenticated by design, so it must not print a
-    credential someone chose. The shipped default is public and worth showing;
-    anything else is redacted, because publishing it would be the page's own doing
-    rather than the operator's."""
-    t = os.environ.get("VO_TOKEN", "vo-dev-token")
-    return t if t == "vo-dev-token" else "<redacted: the value of VO_TOKEN>"
+# The Control Center is unauthenticated by design, so it prints no credential at
+# all, not even the shipped default. Examples reference the shell variable instead,
+# which keeps them copy-pasteable without putting a token on the page.
+TOKEN_PLACEHOLDER = "$VO_TOKEN"
 
 
 def asset_version():
@@ -331,7 +328,7 @@ LENS_PATTERN = {"servicenow": ("/servicenow/api/now/table", "offset"),
 
 def _curl(method, path, params, profile):
     base = "http://localhost:8080"
-    h = f' -H "Authorization: Bearer {os.environ.get("VO_TOKEN", "vo-dev-token")}"'
+    h = f' -H "Authorization: Bearer {TOKEN_PLACEHOLDER}"'
     if profile:
         h += f" \\\n     -H 'X-VO-Profile: {profile}'"
     if method == "POST":
@@ -391,7 +388,7 @@ def manual(request: Request, ch: str = "overview"):
                                          method=method, profile=profile, cap=2200)})
         ctx.update(lenses=lenses, examples=examples,
                    fieldmaps=M.profile_fieldmaps(), config_yaml=M.config_file(),
-                   token=_shown_token())
+                   token=TOKEN_PLACEHOLDER)
     elif ch == "api":
         ctx["endpoints"] = M.endpoints()
         ctx["prov"] = probes.provenance()

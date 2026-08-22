@@ -249,8 +249,12 @@
 <p class="note">Static bearer token today. Every endpoint except <code>/healthz</code> and
   <code>/_lens/{id}</code> requires it; a missing or wrong token is a <code>401</code>.</p>
 <pre>Authorization: Bearer {{ token }}</pre>
-<p class="note">Set <code>VO_TOKENS</code> in <code>.env</code> to change it — comma-separated
-  for multiple valid tokens.</p>
+<p class="note">The examples below reference <code>$VO_TOKEN</code> rather than a literal
+  value, because this page has no authentication and should not print a credential.
+  Export it from your <code>.env</code> before pasting them:</p>
+<pre>export VO_TOKEN=$(grep '^VO_TOKENS=' .env | cut -d= -f2 | cut -d, -f1)</pre>
+<p class="note">Set <code>VO_TOKENS</code> in <code>.env</code> to change it. It is
+  comma-separated, so several tokens can be valid at once.</p>
 <p class="note"><b>Real OAuth is available.</b> <code>VO_AUTH_MODE=jwks</code> validates
   RS256 tokens against Keycloak's published keys — signature, issuer, audience and expiry,
   nothing stubbed. Fetch one with the <code>vo-kit</code> client credentials against

@@ -53,6 +53,10 @@ nothing still leaves them unguessable:
   `account` into every token it issues for a realm, so checking it would prove the realm
   and nothing more. The realm ships an audience mapper so tokens name the client.
 
+The Control Center renders no credential on any page, not even the shipped default.
+Its examples reference `$VO_TOKEN`, so they stay copy-pasteable without publishing a
+token on a surface that has no authentication. CI asserts this across every page.
+
 Every endpoint except `/healthz` requires a credential, including the `/_lens/{id}` and
 `/_provenance` metadata routes. `/healthz` stays open because probes and CI need to know
 the service is up before they have anything to authenticate with, and it returns only
