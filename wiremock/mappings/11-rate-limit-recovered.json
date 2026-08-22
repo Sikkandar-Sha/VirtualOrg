@@ -1,0 +1,7 @@
+{
+  "priority": 1,
+  "scenarioName": "splunk-rate-limit",
+  "requiredScenarioState": "backed-off",
+  "request": { "method": "GET", "urlPathPattern": "/splunk/services/search/jobs/[^/]+" },
+  "response": { "proxyBaseUrl": "http://twin-gateway:8080" }
+}

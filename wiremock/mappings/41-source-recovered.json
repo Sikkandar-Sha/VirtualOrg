@@ -1,0 +1,12 @@
+{
+  "priority": 1,
+  "scenarioName": "snow-unreachable",
+  "requiredScenarioState": "recovered",
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/servicenow/api/now/table/cmdb_ci_computer"
+  },
+  "response": {
+    "proxyBaseUrl": "http://twin-gateway:8080"
+  }
+}

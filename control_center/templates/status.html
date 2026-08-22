@@ -1,0 +1,93 @@
+{% extends "base.html" %}{% block title %}Status{% endblock %}
+{% block body %}
+{% set bad = probes | selectattr('state', 'in', ['down','degraded']) | rejectattr('optional') | list %}
+<div class="eyebrow">Surface 0 · is everything running</div>
+<h1>{% if bad %}{{ bad|length }} dependency needs attention{% else %}All systems live{% endif %}</h1>
+<p class="lede">Each row below is a real request, made now. Nothing here is read from the
+  Docker daemon — a container can be “running” and still answer wrongly.</p>
+
+<div class="status" style="margin-top:22px">
+  {% for p in probes %}
+  <div>
+    <div class="k">{{ p.name }}</div>
+    <div class="v">
+      <span class="dot {% if p.state == 'up' %}{% elif p.state == 'off' %}idle{% else %}down{% endif %}"></span>
+      {{ p.state }}
+      <small>{{ p.detail }}</small>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if not prov.certified %}
+<div class="verdict warn">
+  <div class="eyebrow">Fidelity — read before trusting a green run</div>
+  <p>No twin here is verified against a vendor artefact. Every response shape was
+    written from our understanding of the documented behaviour, so a connector and a
+    twin can be wrong together and CI will stay green.
+    <b>{{ prov.unverified | length }} of {{ prov.lenses | length }} lenses are
+    unverified.</b> Passing tests show the kit agrees with this environment — not
+    that either agrees with the vendor.
+    <a href="/manual?ch=api">See the manifests →</a></p>
+</div>
+{% endif %}
+
+<h2>Lenses answer as a connector would</h2>
+<p class="note">A twin that returns 200 for <code>/healthz</code> can still fail the pattern a
+  connector actually uses. Splunk is exercised as a full submit → poll → DONE cycle.</p>
+<div class="wrap"><table>
+  <tr><th>Lens</th><th>Call</th><th>State</th><th>Detail</th></tr>
+  {% for r in lens_probes %}
+  <tr>
+    <td class="id"><a href="/lenses/{{ r.lens }}">{{ r.lens }}</a></td>
+    <td class="dim">{{ r.call }}</td>
+    <td><span class="dot {% if r.state != 'up' %}down{% endif %}"></span> {{ r.state }}</td>
+    <td class="dim">{{ r.detail }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+<h2>Loss profiles in force</h2>
+<div class="wrap"><table>
+  <tr><th>Lens</th><th>Vendor</th><th>Identifies by</th><th class="num">Coverage</th>
+      <th class="num">Latency</th><th class="unit"></th>
+      <th class="num">Retention</th><th class="unit"></th><th>Structurally blind to</th></tr>
+  {% for l in lenses %}
+  <tr>
+    <td class="id"><a href="/lenses/{{ l.id }}">{{ l.id }}</a></td>
+    <td>{{ l.vendor }}</td>
+    <td>{{ l.identifier_style }}</td>
+    <td class="num">{{ (l.coverage * 100) | round | int }}%</td>
+    <td class="num">{{ "{:,}".format(l.latency_minutes) }}</td><td class="unit">min</td>
+    <td class="num">{{ "{:,}".format(l.retention_days) }}</td><td class="unit">days</td>
+    <td class="dim">{{ l.blind_spot }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+<div class="cols">
+<div>
+  <h2>Ground truth loaded</h2>
+  <div class="wrap"><table>
+    <tr><th>Family</th><th>Claim</th><th class="num">Rows</th></tr>
+    {% for f in families %}
+    <tr><td><a href="/groundtruth?family={{ f.family }}">{{ f.family }}</a></td>
+        <td class="dim">{{ f.claim }}</td><td class="num">{{ "{:,}".format(f.n) }}</td></tr>
+    {% endfor %}
+  </table></div>
+  <p class="note" style="margin-top:12px">Attribution corpus:
+    <b>{{ "{:,}".format(corpus.true_links) }}</b> true evidence links and <b>{{ "{:,}".format(corpus.traps) }}</b> traps
+    across {{ corpus.controls_with_evidence }} controls. Score the kit as precision and
+    recall against <code>evidence.control_id</code>.</p>
+</div>
+<div>
+  <h2>World contents</h2>
+  <div class="wrap"><table>
+    <tr><th>Table</th><th class="num">Rows</th></tr>
+    {% for c in counts if c.rows %}
+    <tr><td class="id">{{ c.table }}</td><td class="num">{{ "{:,}".format(c.rows) }}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+</div>
+{% endblock %}

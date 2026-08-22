@@ -1,0 +1,221 @@
+{# Inline SVG. No external assets, no libraries — colours come from the same CSS
+   custom properties as the rest of the page, so every diagram themes with it. #}
+
+{% macro world_and_lenses(inv, rows) %}
+{# Geometry derives from the number of lenses. Hard-coding it for three is how the
+   diagram silently overflowed the moment a fourth and fifth were added. #}
+{% set n = rows | length %}
+{% set top = 16 %}{% set step = 124 %}{% set boxh = 100 %}
+{% set last = top + (n - 1) * step + boxh %}
+{% set svgh = last + 46 %}
+{% set mid = ((top + last) / 2) | int %}
+<svg viewBox="0 0 900 {{ svgh }}" class="dgm" role="img"
+     aria-label="One world in a database, projected through {{ n }} lossy lenses into {{ n }} vendor APIs, each serving a named set of object types, consumed by your kit">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="var(--rule-2)"/>
+    </marker>
+    <pattern id="hatch" width="6" height="6" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="var(--void)" stroke-width="1.4" opacity=".5"/>
+    </pattern>
+  </defs>
+
+  <!-- the world -->
+  <ellipse cx="98" cy="{{ mid - 32 }}" rx="58" ry="16" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M40,{{ mid - 32 }} v66 a58,16 0 0 0 116,0 v-66" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+  <ellipse cx="98" cy="{{ mid + 34 }}" rx="58" ry="16" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity=".45"/>
+  <text x="98" y="{{ mid - 2 }}" class="d-t d-mid" fill="var(--accent)">world-db</text>
+  <text x="98" y="{{ mid + 16 }}" class="d-s d-mid">complete · true</text>
+
+  {% set lines = [
+      inv.people ~ ' people · ' ~ inv.assets ~ ' assets',
+      inv.applications ~ ' applications · ' ~ inv.services ~ ' business services',
+      inv.controls ~ ' controls · 3 years of history'] %}
+  {% for line in lines %}
+    <text x="98" y="{{ mid + 74 + loop.index0 * 16 }}" class="d-s d-mid">{{ line }}</text>
+  {% endfor %}
+  <text x="98" y="{{ mid + 142 }}" class="d-s d-mid" fill="var(--ink-3)">every entity, once, truthfully</text>
+
+  <!-- lenses: box contents wrapped on word boundaries, three lines max -->
+  {% for l in rows %}
+    {% set y = top + loop.index0 * step %}
+    {% set c = y + 50 %}
+    <line x1="160" y1="{{ mid }}" x2="315" y2="{{ c }}" stroke="var(--rule-2)" stroke-width="1" marker-end="url(#ar)"/>
+    <polygon points="325,{{ c - 28 }} 380,{{ c }} 325,{{ c + 28 }}" fill="url(#hatch)"
+             stroke="var(--rule-2)" stroke-width="1.2"/>
+    <text x="350" y="{{ c + 4 }}" class="d-s d-mid" fill="var(--ink-3)">lens</text>
+    <line x1="383" y1="{{ c }}" x2="472" y2="{{ c }}" stroke="var(--rule-2)" stroke-width="1" marker-end="url(#ar)"/>
+
+    <rect x="482" y="{{ y }}" width="256" height="{{ boxh }}" fill="var(--card)" stroke="var(--rule-2)"/>
+    <text x="496" y="{{ y + 23 }}" class="d-t">{{ l.vendor }}</text>
+    <text x="{{ 500 + (l.vendor|length * 8) }}" y="{{ y + 23 }}" class="d-s" fill="var(--ink-3)">{{ l.cat }}</text>
+    <text x="496" y="{{ y + 42 }}" class="d-s" fill="var(--ink-2)">{{ l.cov }}% cover · by {{ l.ident }} · {{ l.sync }} behind</text>
+    <text x="496" y="{{ y + 63 }}" class="d-s" fill="var(--accent)">serves</text>
+    {% for line in l.object_lines %}
+      <text x="{{ 538 if loop.first else 496 }}" y="{{ y + 63 + loop.index0 * 15 }}" class="d-s">{{ line }}</text>
+    {% endfor %}
+
+    <line x1="740" y1="{{ c }}" x2="806" y2="{{ c }}" stroke="var(--rule-2)" stroke-width="1" marker-end="url(#ar)"/>
+  {% endfor %}
+
+  <rect x="814" y="{{ top }}" width="74" height="{{ last - top }}" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="851" y="{{ mid - 6 }}" class="d-t d-mid" fill="var(--accent)">your</text>
+  <text x="851" y="{{ mid + 12 }}" class="d-t d-mid" fill="var(--accent)">kit</text>
+
+  <text x="450" y="{{ svgh - 16 }}" class="d-s d-mid" fill="var(--ink-3)">{{ n }} lenses — not {{ inv.applications }} applications. The applications are entities inside the modelled enterprise; the ServiceNow lens catalogues them.</text>
+</svg>
+{% endmacro %}
+
+
+{% macro architecture(cc_port) %}
+<svg viewBox="0 0 900 300" class="dgm" role="img"
+     aria-label="Container layout: world-db, world-engine, twin-gateway, control-center, keycloak and wiremock, with the kit outside compose">
+  <rect x="14" y="14" width="640" height="230" fill="none" stroke="var(--rule)" stroke-dasharray="4 4"/>
+  <text x="26" y="34" class="d-s" fill="var(--ink-2)">docker compose — “virtualorg”</text>
+
+  <rect x="34" y="52" width="150" height="60" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="48" y="76" class="d-t" fill="var(--accent)">world-db</text>
+  <text x="48" y="94" class="d-s">postgres · :5433</text>
+
+  <rect x="34" y="140" width="150" height="60" fill="var(--card)" stroke="var(--rule-2)"/>
+  <text x="48" y="164" class="d-t">world-engine</text>
+  <text x="48" y="182" class="d-s">one-shot · then exits</text>
+  <line x1="109" y1="140" x2="109" y2="115" stroke="var(--rule-2)" marker-end="url(#ar)"/>
+  <text x="118" y="130" class="d-s" fill="var(--ink-2)">writes</text>
+
+  <rect x="240" y="52" width="160" height="60" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="254" y="76" class="d-t" fill="var(--accent)">twin-gateway</text>
+  <text x="254" y="94" class="d-s">3 vendor faces · :8080</text>
+  <line x1="186" y1="82" x2="236" y2="82" stroke="var(--rule-2)" marker-end="url(#ar)"/>
+  <text x="196" y="74" class="d-s" fill="var(--ink-2)">reads</text>
+
+  <rect x="240" y="140" width="160" height="60" fill="var(--card)" stroke="var(--rule-2)"/>
+  <text x="254" y="164" class="d-t">control-center</text>
+  <text x="254" y="182" class="d-s">this app · :{{ cc_port }}</text>
+  <line x1="186" y1="170" x2="236" y2="170" stroke="var(--rule-2)" marker-end="url(#ar)"/>
+
+  <rect x="456" y="52" width="170" height="60" fill="var(--card)" stroke="var(--rule-2)"/>
+  <text x="470" y="76" class="d-t">wiremock</text>
+  <text x="470" y="94" class="d-s">chaos profile · :8090</text>
+  <line x1="404" y1="82" x2="452" y2="82" stroke="var(--rule-2)" stroke-dasharray="3 3" marker-end="url(#ar)"/>
+
+  <rect x="456" y="140" width="170" height="60" fill="var(--card)" stroke="var(--rule-2)"/>
+  <text x="470" y="164" class="d-t">keycloak</text>
+  <text x="470" y="182" class="d-s">oauth · :8081</text>
+
+  <rect x="700" y="86" width="170" height="86" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="716" y="114" class="d-t" fill="var(--accent)">your kit</text>
+  <text x="716" y="132" class="d-s">runs in your IDE,</text>
+  <text x="716" y="148" class="d-s">debugger attached</text>
+  <line x1="628" y1="129" x2="696" y2="129" stroke="var(--rule-2)" marker-end="url(#ar)"/>
+
+  <text x="26" y="268" class="d-s" fill="var(--ink-2)">The kit is deliberately not a compose service: a rebuild between edits is small per iteration and enormous over a quarter.</text>
+  <text x="26" y="284" class="d-s" fill="var(--ink-2)">Dashed = only present under --profile chaos.</text>
+</svg>
+{% endmacro %}
+
+
+{% macro spine() %}
+<svg viewBox="0 0 900 290" class="dgm" role="img"
+     aria-label="The spine: framework to requirement to control to evidence to asset to service, with risk attached">
+  {% set nodes = [(20,'Framework'), (150,'Requirement'), (285,'Control'),
+                  (415,'Evidence'), (545,'Asset / App'), (690,'Service')] %}
+  {% for x, label in nodes %}
+    <rect x="{{ x }}" y="86" width="{{ 118 if label != 'Asset / App' else 122 }}" height="46"
+          fill="var(--card)" stroke="{{ 'var(--accent)' if label in ['Control','Evidence'] else 'var(--rule-2)' }}"
+          stroke-width="{{ 1.6 if label in ['Control','Evidence'] else 1 }}"/>
+    <text x="{{ x + 59 }}" y="114" class="d-t d-mid"
+          fill="{{ 'var(--accent)' if label in ['Control','Evidence'] else 'var(--ink)' }}">{{ label }}</text>
+    {% if not loop.last %}
+      <line x1="{{ x + 120 }}" y1="109" x2="{{ nodes[loop.index][0] - 4 }}" y2="109"
+            stroke="var(--rule-2)" marker-end="url(#ar)"/>
+    {% endif %}
+  {% endfor %}
+
+  <rect x="20" y="52" width="118" height="0" fill="none"/>
+  <text x="344" y="72" class="d-s d-mid" fill="var(--ink-2)">coverage strength</text>
+  <text x="474" y="72" class="d-s d-mid" fill="var(--ink-2)">from the lenses</text>
+
+  <rect x="345" y="196" width="180" height="46" fill="var(--card)" stroke="var(--flag)" stroke-width="1.4"/>
+  <text x="435" y="224" class="d-t d-mid" fill="var(--flag)">Risk</text>
+  <line x1="344" y1="196" x2="344" y2="136" stroke="var(--rule-2)" stroke-dasharray="3 3"/>
+  <text x="256" y="170" class="d-s" fill="var(--ink-2)">mitigated by</text>
+  <line x1="526" y1="212" x2="690" y2="212" stroke="var(--rule-2)" stroke-dasharray="3 3"/>
+  <line x1="750" y1="212" x2="750" y2="136" stroke="var(--rule-2)" stroke-dasharray="3 3" marker-end="url(#ar)"/>
+  <text x="556" y="204" class="d-s" fill="var(--ink-2)">threatens</text>
+
+  <text x="450" y="30" class="d-s d-mid" fill="var(--ink-2)">Nothing in any vendor API links a detection to a control. That join is the kit's job — and the thing most likely to be wrong in a way nobody notices.</text>
+  <text x="450" y="274" class="d-s d-mid" fill="var(--ink-2)">All four of the kit's outputs are traversals of this one graph.</text>
+</svg>
+{% endmacro %}
+
+
+{% macro patterns() %}
+<svg viewBox="0 0 900 330" class="dgm" role="img"
+     aria-label="Three connector call patterns: offset pagination, asynchronous search job, and cursor pagination">
+  {% for col, title, sub in [(0,'Offset pagination','ServiceNow'),
+                             (305,'Async search job','Splunk'),
+                             (610,'Cursor pagination','GRC')] %}
+    <text x="{{ col + 10 }}" y="22" class="d-t">{{ title }}</text>
+    <text x="{{ col + 10 }}" y="40" class="d-s" fill="var(--ink-2)">{{ sub }}</text>
+    <line x1="{{ col + 40 }}" y1="56" x2="{{ col + 40 }}" y2="300" stroke="var(--rule)"/>
+    <line x1="{{ col + 230 }}" y1="56" x2="{{ col + 230 }}" y2="300" stroke="var(--rule)"/>
+    <text x="{{ col + 40 }}" y="{{ 52 }}" class="d-s d-mid" fill="var(--ink-2)">kit</text>
+    <text x="{{ col + 230 }}" y="{{ 52 }}" class="d-s d-mid" fill="var(--ink-2)">twin</text>
+  {% endfor %}
+
+  {% macro step(col, y, label, back) %}
+    <line x1="{{ col + 40 }}" y1="{{ y }}" x2="{{ col + 226 }}" y2="{{ y }}"
+          stroke="var(--accent)" marker-end="url(#ar)"/>
+    <text x="{{ col + 44 }}" y="{{ y - 6 }}" class="d-s">{{ label }}</text>
+    {% if back %}
+      <line x1="{{ col + 230 }}" y1="{{ y + 22 }}" x2="{{ col + 44 }}" y2="{{ y + 22 }}"
+            stroke="var(--rule-2)" stroke-dasharray="3 3" marker-end="url(#ar)"/>
+      <text x="{{ col + 48 }}" y="{{ y + 16 }}" class="d-s" fill="var(--ink-2)">{{ back }}</text>
+    {% endif %}
+  {% endmacro %}
+
+  {{ step(0, 86, 'GET ?sysparm_offset=0', '200 · X-Total-Count') }}
+  {{ step(0, 156, 'GET ?sysparm_offset=100', '200 · next 100') }}
+  {{ step(0, 226, 'GET ?sysparm_offset=200', '200 · fewer than limit → stop') }}
+
+  {{ step(305, 86, 'POST /jobs  search=…', '201 · {sid}') }}
+  {{ step(305, 156, 'GET /jobs/{sid}', 'RUNNING · never done first poll') }}
+  {{ step(305, 226, 'GET /jobs/{sid}', 'DONE · resultCount') }}
+  {{ step(305, 280, 'GET /jobs/{sid}/results', '200 · rows') }}
+
+  {{ step(610, 86, 'GET ?limit=50', '200 · next_cursor') }}
+  {{ step(610, 156, 'GET ?cursor=…', '200 · next_cursor') }}
+  {{ step(610, 226, 'GET ?cursor=…', '200 · next_cursor: null → stop') }}
+</svg>
+{% endmacro %}
+
+
+{% macro correlation(a, lenses) %}
+<svg viewBox="0 0 900 300" class="dgm" role="img"
+     aria-label="One machine named three different ways by three lenses, with no shared identifier between them">
+  <rect x="330" y="18" width="240" height="58" fill="var(--card)" stroke="var(--accent)" stroke-width="1.6"/>
+  <text x="450" y="42" class="d-t d-mid" fill="var(--accent)">{{ a.id }}</text>
+  <text x="450" y="62" class="d-s d-mid">one machine in the world</text>
+
+  {% for l in lenses %}
+    {% set x = 40 + loop.index0 * 290 %}
+    <line x1="450" y1="78" x2="{{ x + 110 }}" y2="140" stroke="var(--rule-2)" marker-end="url(#ar)"/>
+    <rect x="{{ x }}" y="146" width="220" height="76"
+          fill="{{ 'var(--card)' if l.external_id else 'none' }}"
+          stroke="{{ 'var(--rule-2)' if l.external_id else 'var(--void)' }}"
+          stroke-dasharray="{{ '' if l.external_id else '4 3' }}"/>
+    <text x="{{ x + 14 }}" y="170" class="d-t">{{ l.vendor }}</text>
+    {% if l.external_id %}
+      <text x="{{ x + 14 }}" y="194" class="d-id" fill="var(--accent)">{{ l.external_id }}</text>
+      <text x="{{ x + 14 }}" y="212" class="d-s" fill="var(--ink-2)">names it by {{ l.identifier_style }}</text>
+    {% else %}
+      <text x="{{ x + 14 }}" y="194" class="d-s" fill="var(--void)">NOT VISIBLE</text>
+      <text x="{{ x + 14 }}" y="212" class="d-s" fill="var(--void)">structurally blind to it</text>
+    {% endif %}
+  {% endfor %}
+
+  <text x="450" y="262" class="d-s d-mid" fill="var(--ink-2)">No two of these strings match. Nothing in any response says they are the same machine.</text>
+  <text x="450" y="282" class="d-s d-mid" fill="var(--flag)">Resolving them is the kit's first job — and IPs are recycled, so the IP alone is not a key.</text>
+</svg>
+{% endmacro %}

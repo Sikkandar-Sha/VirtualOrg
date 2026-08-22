@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VirtualOrg — a synthetic enterprise for testing risk-posture products</title>
+<meta name="description" content="Model an enterprise once, truthfully. Make every vendor tool a lossy lens over it. Ship with 1,217 ground-truth assertions saying what your product should conclude — and what it should refuse to conclude.">
+<meta property="og:title" content="VirtualOrg">
+<meta property="og:description" content="A synthetic enterprise for testing risk-posture products — with the answer key included.">
+<meta property="og:type" content="website">
+<style>
+:root{
+  --paper:#eceff3; --card:#fff; --sunk:#e3e7ec;
+  --ink:#10141a; --ink-2:#55606d; --ink-3:#7c8794;
+  --rule:#d6dae0; --rule-2:#b7bfc8;
+  --accent:#1b3c69; --flag:#8e2f22; --ok:#2a5f47; --void:#93a0ad;
+  --serif:ui-serif,"New York",Georgia,"Iowan Old Style","Times New Roman",serif;
+  --ui:ui-sans-serif,-apple-system,"SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --paper:#11151a; --card:#191e25; --sunk:#151a20;
+  --ink:#e8ecf1; --ink-2:#939fad; --ink-3:#6f7b89;
+  --rule:#272f38; --rule-2:#38424e;
+  --accent:#85aade; --flag:#d98572; --ok:#6bbb92; --void:#58626e;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:400 16px/1.65 var(--ui);-webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums}
+a{color:var(--accent)}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.wrap{max-width:920px;margin:0 auto;padding:0 28px}
+section{padding:64px 0;border-top:1px solid var(--rule)}
+section:first-of-type{border-top:0}
+h1{font:400 clamp(38px,7vw,62px)/1.06 var(--serif);letter-spacing:-.022em;margin:0}
+h2{font:500 clamp(22px,3.4vw,28px)/1.22 var(--serif);letter-spacing:-.012em;margin:0 0 18px}
+h3{font:500 15px/1.35 var(--ui);margin:0 0 6px}
+p{margin:0 0 16px;max-width:66ch;color:var(--ink-2)}
+p.lead{font:400 clamp(17px,2.2vw,20px)/1.55 var(--ui);color:var(--ink);max-width:60ch}
+.eyebrow{font:500 10px/1 var(--ui);letter-spacing:.18em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:20px}
+b,strong{color:var(--ink);font-weight:600}
+code{font-family:var(--mono);font-size:.86em;background:var(--sunk);
+  border:1px solid var(--rule);border-radius:2px;padding:1px 5px}
+pre{font:400 12.5px/1.6 var(--mono);background:var(--card);border:1px solid var(--rule);
+  border-radius:3px;padding:18px 20px;overflow-x:auto;margin:0}
+pre code{background:none;border:0;padding:0;font-size:inherit}
+
+/* hero */
+header{padding:88px 0 60px}
+header .tag{font:500 11px/1 var(--ui);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);margin-bottom:22px}
+.sub{font:400 clamp(18px,2.6vw,23px)/1.45 var(--serif);color:var(--ink-2);
+  max-width:34ch;margin:20px 0 0}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:34px}
+.btn{display:inline-block;padding:11px 20px;border-radius:3px;font:500 14px/1 var(--ui);
+  text-decoration:none;border:1px solid var(--rule-2);color:var(--ink)}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{opacity:.9;color:#fff}
+@media (prefers-color-scheme:dark){.btn.primary{color:#0d1117}}
+
+/* the lens diagram */
+figure{margin:34px 0 0}
+svg.dgm{width:100%;height:auto;display:block;background:var(--card);
+  border:1px solid var(--rule);border-radius:3px}
+svg.dgm text{font-family:var(--ui);fill:var(--ink)}
+svg.dgm .t{font-size:12.5px;font-weight:500}
+svg.dgm .s{font-size:10.5px;fill:var(--ink-2)}
+svg.dgm .m{font-family:var(--mono);font-size:10.5px;fill:var(--ink-2)}
+figcaption{font:400 13px/1.6 var(--ui);color:var(--ink-3);margin-top:12px;max-width:70ch}
+
+/* figures row */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  border:1px solid var(--rule-2);background:var(--card);border-radius:3px;margin-top:8px}
+.stats div{padding:18px 20px;border-right:1px solid var(--rule)}
+.stats div:last-child{border-right:0}
+.stats .n{font:400 26px/1.1 var(--serif);letter-spacing:-.01em}
+.stats .k{font:500 9.5px/1.3 var(--ui);letter-spacing:.11em;text-transform:uppercase;
+  color:var(--ink-3);margin-top:7px;white-space:nowrap}
+
+/* generic table */
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin-top:6px}
+th{text-align:left;font:500 9.5px/1 var(--ui);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-3);padding:0 14px 9px 0;border-bottom:1px solid var(--rule-2);white-space:nowrap}
+td{padding:11px 14px 11px 0;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink-2)}
+td:first-child{color:var(--ink);min-width:168px}
+td.m{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+.scroll{overflow-x:auto}
+
+/* pull quote */
+blockquote{margin:30px 0 0;padding:20px 24px;background:var(--card);
+  border:1px solid var(--rule);border-left:2px solid var(--accent);border-radius:3px}
+blockquote p{font:400 18px/1.5 var(--serif);color:var(--ink);margin:0;max-width:60ch}
+
+/* family cards */
+.fam{display:grid;grid-template-columns:1fr 1fr;gap:1px;
+  background:var(--rule);border:1px solid var(--rule-2);border-radius:3px;overflow:hidden;margin-top:8px}
+.fam > div{background:var(--card);padding:20px}
+.fam h3{font-family:var(--serif);font-size:17px;font-weight:500}
+.fam p{font-size:14px;margin:0;max-width:none}
+.fam .n{font:400 13px/1 var(--mono);color:var(--ink-3);margin-top:12px;display:block}
+
+footer{border-top:1px solid var(--rule);padding:40px 0 64px;color:var(--ink-3);font-size:13.5px}
+footer a{color:var(--ink-2)}
+@media (max-width:640px){
+  .fam{grid-template-columns:1fr}
+  .stats div{border-right:0;border-bottom:1px solid var(--rule)}
+  .stats div:last-child{border-bottom:0}
+  section{padding:48px 0}
+  header{padding:56px 0 40px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="tag">Open source · Apache 2.0</div>
+    <h1>VirtualOrg</h1>
+    <p class="sub">A synthetic enterprise for testing risk-posture products — with the
+      answer key included.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Sikkandar-Sha/VirtualOrg">View on GitHub</a>
+      <a class="btn" href="#start">Quick start</a>
+      <a class="btn" href="#how">How it works</a>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">The problem</div>
+    <h2>You cannot test a posture engine without an enterprise, and every enterprise you can get is wrong</h2>
+    <p class="lead">You are building something that reads a SIEM, an ITSM, a GRC platform
+      and a scanner over their APIs, and produces residual risk per service, control
+      effectiveness, and a board-level score. To know whether it works, you need
+      somewhere to point it.</p>
+    <div class="scroll"><table>
+      <tr><th>Option</th><th>Why it fails</th></tr>
+      <tr><td>A real customer</td><td>You cannot. And even if you could, nobody knows what
+        the right answer was — so you cannot tell a good posture from a plausible one.</td></tr>
+      <tr><td>A demo dataset</td><td>Clean, consistent, complete. It never exercises
+        correlation, conflict or coverage gaps, which are the only hard parts.</td></tr>
+      <tr><td>Real products in a lab</td><td>Months of work, no ARM64 images for several,
+        and at the end you still have no ground truth.</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">The idea</div>
+    <h2>Model the enterprise once. Make every tool a lossy lens over it.</h2>
+    <p class="lead">Your product calls an endpoint and receives JSON. It cannot tell
+      whether that JSON came from a real product or a database query. So the world is
+      modelled once — completely and truthfully — and every vendor API is a deliberately
+      imperfect view of it.</p>
+
+    <figure>
+      <svg class="dgm" viewBox="0 0 900 430" role="img"
+           aria-label="One database projected through seven lossy vendor lenses into your kit">
+        <defs>
+          <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="var(--rule-2)"/></marker>
+          <pattern id="h" width="6" height="6" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--void)" stroke-width="1.4" opacity=".55"/></pattern>
+        </defs>
+        <ellipse cx="96" cy="183" rx="56" ry="16" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+        <path d="M40,183 v64 a56,16 0 0 0 112,0 v-64" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+        <ellipse cx="96" cy="247" rx="56" ry="16" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity=".45"/>
+        <text x="96" y="211" class="t" text-anchor="middle" fill="var(--accent)">world-db</text>
+        <text x="96" y="229" class="s" text-anchor="middle">complete · true</text>
+        <text x="96" y="288" class="s" text-anchor="middle">40 tables · 38,000 rows</text>
+        <text x="96" y="304" class="s" text-anchor="middle">3 years of history</text>
+        <text x="96" y="320" class="s" text-anchor="middle">1,217 assertions</text>
+
+        <polygon points="248,187 300,215 248,243" fill="url(#h)" stroke="var(--rule-2)" stroke-width="1.2"/>
+        <text x="270" y="219" class="s" text-anchor="middle">lens</text>
+        <line x1="156" y1="215" x2="242" y2="215" stroke="var(--rule-2)" marker-end="url(#a)"/>
+        <line x1="303" y1="215" x2="336" y2="215" stroke="var(--rule-2)"/>
+
+        <g>
+          <line x1="336" y1="215" x2="336" y2="42"  stroke="var(--rule-2)"/>
+          <line x1="336" y1="215" x2="336" y2="388" stroke="var(--rule-2)"/>
+        </g>
+        <g id="rows">
+          <!-- vendor, coverage, identifier, latency -->
+          <g><line x1="336" y1="42" x2="378" y2="42" stroke="var(--rule-2)" marker-end="url(#a)"/>
+             <text x="388" y="38" class="t">ServiceNow</text><text x="388" y="54" class="m">97% · fqdn · 1d behind</text></g>
+          <g><line x1="336" y1="100" x2="378" y2="100" stroke="var(--rule-2)" marker-end="url(#a)"/>
+             <text x="388" y="96" class="t">Splunk</text><text x="388" y="112" class="m">83% · ip · 5m · 90d window</text></g>
+          <g><line x1="336" y1="158" x2="378" y2="158" stroke="var(--rule-2)" marker-end="url(#a)"/>
+             <text x="388" y="154" class="t">Onspring</text><text x="388" y="170" class="m">91% · asset tag · 7d behind</text></g>
+          <g><line x1="336" y1="216" x2="378" y2="216" stroke="var(--rule-2)" marker-end="url(#a)"/>
+             <text x="388" y="212" class="t">Okta</text><text x="388" y="228" class="m">94% · login · 15m behind</text></g>
+          <g><line x1="336" y1="274" x2="378" y2="274" stroke="var(--rule-2)" marker-end="url(#a)"/>
+             <text x="388" y="270" class="t">Tenable</text><text x="388" y="286" class="m">88% · hostname · 365d window</text></g>
+          <g><line x1="336" y1="332" x2="378" y2="332" stroke="var(--rule-2)" marker-end="url(#a)"/>
+             <text x="388" y="328" class="t">Workday</text><text x="388" y="344" class="m">employees only · no contractors</text></g>
+          <g><line x1="336" y1="388" x2="378" y2="388" stroke="var(--rule-2)" marker-end="url(#a)"/>
+             <text x="388" y="384" class="t">CrowdStrike</text><text x="388" y="400" class="m">79% · agent id · 30d window</text></g>
+        </g>
+        <!-- collect every lens back into one consumer, so the arrow is not floating -->
+        <g stroke="var(--rule-2)" fill="none">
+          <line x1="676" y1="42"  x2="712" y2="42"/>
+          <line x1="676" y1="100" x2="712" y2="100"/>
+          <line x1="676" y1="158" x2="712" y2="158"/>
+          <line x1="676" y1="216" x2="712" y2="216"/>
+          <line x1="676" y1="274" x2="712" y2="274"/>
+          <line x1="676" y1="332" x2="712" y2="332"/>
+          <line x1="676" y1="388" x2="712" y2="388"/>
+          <line x1="712" y1="42"  x2="712" y2="388"/>
+        </g>
+        <line x1="712" y1="215" x2="764" y2="215" stroke="var(--rule-2)" marker-end="url(#a)"/>
+        <rect x="770" y="26" width="104" height="378" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5" rx="3"/>
+        <text x="822" y="209" class="t" text-anchor="middle" fill="var(--accent)">your</text>
+        <text x="822" y="227" class="t" text-anchor="middle" fill="var(--accent)">kit</text>
+      </svg>
+      <figcaption>Five different names for the same machine, two more for the same person,
+        and no lens that sees all of it. All loss is applied at read time — the world
+        itself is never wrong.</figcaption>
+    </figure>
+
+    <blockquote><p>A VirtualOrg whose lenses are faithful and complete is a database with
+      extra steps. The loss profiles <em>are</em> the test.</p></blockquote>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">What you get</div>
+    <h2>Ground truth, not just data</h2>
+    <div class="stats">
+      <div><div class="n">1,217</div><div class="k">assertions</div></div>
+      <div><div class="n">5,023</div><div class="k">evidence links</div></div>
+      <div><div class="n">773</div><div class="k">traps</div></div>
+      <div><div class="n">7</div><div class="k">lenses</div></div>
+      <div><div class="n">~7s</div><div class="k">cold boot</div></div>
+    </div>
+    <p style="margin-top:26px"><code>world.expectation</code> says what your product
+      <strong>should conclude</strong>, and what it should <strong>refuse</strong> to
+      conclude. Four families:</p>
+    <div class="fam">
+      <div><h3>Attribution</h3><p>Is this event genuine evidence for this control? Nothing
+        in any vendor API links a detection to a control — that inference is your product's
+        core job.</p><span class="n">5,023 links · 773 traps</span></div>
+      <div><h3>Conflict</h3><p>Sources disagree. Resolve it with a defensible rule or
+        surface it — either is valid. Silently picking a winner is not.</p>
+        <span class="n">129 planted</span></div>
+      <div><h3>Degradation</h3><p>A source is stale or down. Does posture announce the gap,
+        or serve last week's numbers as current?</p><span class="n">12 + a chaos proxy</span></div>
+      <div><h3>Absence</h3><p>Controls with no evidence, policies nothing implements,
+        machines nobody watches. For an SSOT, silence must be distinguishable from
+        health.</p><span class="n">303 planted</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Where it helps</div>
+    <h2>Five things it is actually for</h2>
+    <div class="scroll"><table>
+      <tr><th>If you are…</th><th>VirtualOrg gives you</th></tr>
+      <tr><td>Writing connectors</td><td>Seven live API patterns — async job, cursor,
+        offset, Link header, page number, incremental <code>since</code>,
+        query-then-hydrate — plus binary evidence behind a second credential</td></tr>
+      <tr><td>Testing entity resolution</td><td>One machine under five identifiers,
+        recycled IPs so the IP is not a key, and exactly one join that <em>does</em> work
+        so you can tell the difference</td></tr>
+      <tr><td>Guarding against regressions</td><td>A deterministic world and a
+        sub-second restore, so any posture delta is a real finding</td></tr>
+      <tr><td>Proving deployability</td><td>Three customer schema profiles per vendor.
+        Passing all three means the connector ships; passing only
+        <code>out-of-the-box</code> means it demos</td></tr>
+      <tr><td>Demoing</td><td>“Here are the 52 machines with no endpoint agent, and the
+        7 control exceptions that expired months ago — a GRC platform will never tell
+        you that”</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <div class="eyebrow">Quick start</div>
+    <h2>Seven seconds from clone to a running enterprise</h2>
+<pre><code>git clone https://github.com/Sikkandar-Sha/VirtualOrg.git &amp;&amp; cd VirtualOrg
+cp .env.example .env
+docker compose up -d          # world, seven twins, Keycloak, Control Center
+./scripts/status              # is everything running?
+open http://localhost:3000    # the Control Center</code></pre>
+    <p style="margin-top:22px">Point your product at
+      <code>config/virtualorg/connectors.yaml</code> — the whole environment switch is a
+      config file, never a patched build. Then run
+      <code>python3 scripts/verify.py</code>: 80 self-checks that prove the conditions
+      the ground truth claims exist are genuinely observable through the vendor APIs.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Honesty</div>
+    <h2>What this does not give you</h2>
+    <p>With no vendor product in the loop, every claim of correctness rests on twin
+      fidelity. Nothing here can tell you that a connector has misread a vendor's
+      pagination — the connector and the twin would be wrong together, in green CI,
+      indefinitely.</p>
+    <p>So every twin ships a <strong>provenance manifest</strong> recording where each
+      response shape came from. All seven are marked <code>unverified</code>, because
+      they were written from published behaviour rather than captured from a real tenant.
+      <strong>Passing tests here show your product agrees with this environment — not
+      that either agrees with the vendor.</strong> That gap is paid down by certification
+      against real vendor tenants, not by hope.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p style="margin:0">VirtualOrg · Apache 2.0 ·
+      <a href="https://github.com/Sikkandar-Sha/VirtualOrg">github.com/Sikkandar-Sha/VirtualOrg</a></p>
+    <p style="margin:10px 0 0;font-size:12.5px">ServiceNow, Splunk, Onspring, Okta,
+      Tenable, Workday and CrowdStrike are trademarks of their respective owners.
+      VirtualOrg is not affiliated with, endorsed by, or derived from any of them.</p>
+  </div>
+</footer>
+
+</body>
+</html>

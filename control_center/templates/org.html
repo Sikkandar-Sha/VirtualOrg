@@ -1,0 +1,105 @@
+{% extends "base.html" %}{% block title %}The org{% endblock %}
+{% block body %}
+<div class="eyebrow">Surface 4 · the org</div>
+<h1>Browsable inventory</h1>
+
+<div class="tabs">
+  {% for t in ['overview','people','assets','controls','services'] %}
+  <a href="/org?tab={{ t }}" {% if tab == t %}aria-current="page"{% endif %}>{{ t }}</a>
+  {% endfor %}
+</div>
+
+{% if tab == 'overview' %}
+<div class="cols" style="margin-top:22px">
+<div>
+  <h2>Counts</h2>
+  <div class="wrap"><table>
+    {% for c in counts %}
+    <tr><td>{{ c.entity }}</td><td class="num">{{ "{:,}".format(c.n) }}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+<div>
+  <h2>Departments</h2>
+  <div class="wrap"><table>
+    <tr><th>Department</th><th>Cost centre</th><th class="num">People</th><th class="num">Leavers</th></tr>
+    {% for d in depts %}
+    <tr><td>{{ d.name }}</td><td class="id dim">{{ d.cost_center }}</td>
+        <td class="num">{{ d.n }}</td><td class="num">{{ d.leavers }}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+</div>
+
+{% elif tab == 'people' %}
+<form class="filters" method="get">
+  <input type="hidden" name="tab" value="people">
+  <input name="q" value="{{ q }}" placeholder="id, name or email" size="28">
+  <label style="align-self:center;font-family:var(--prose);font-size:12px">
+    <input type="checkbox" name="leavers" value="1" {% if leavers %}checked{% endif %} style="width:auto"> leavers only
+  </label>
+  <button type="submit">Filter</button>
+</form>
+<div class="wrap"><table>
+  <tr><th>ID</th><th>Name</th><th>Department</th><th>Title</th><th>Type</th><th>Started</th><th>Left</th></tr>
+  {% for r in rows %}
+  <tr><td class="id"><a href="/org/person/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.full_name }}</td>
+      <td class="dim">{{ r.department }}</td><td class="dim">{{ r.title }}</td>
+      <td class="dim">{{ r.employment }}</td><td class="id dim">{{ r.started_on }}</td>
+      <td>{% if r.ended_on %}<span class="tag conflict">{{ r.ended_on }}</span>{% else %}<span class="dim">—</span>{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+
+{% elif tab == 'assets' %}
+<form class="filters" method="get">
+  <input type="hidden" name="tab" value="assets">
+  <input name="q" value="{{ q }}" placeholder="id, hostname, fqdn, tag or ip" size="28">
+  <select name="kind">
+    <option value="">any kind</option>
+    {% for k in ['endpoint','server','cloud'] %}
+    <option value="{{ k }}" {% if kind == k %}selected{% endif %}>{{ k }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Filter</button>
+</form>
+<p class="note">{{ "{:,}".format(total) }} matching.</p>
+<div class="wrap"><table>
+  <tr><th>Asset</th><th>Hostname</th><th>FQDN</th><th>Asset tag</th><th>IP</th><th>Kind</th><th>Owner</th></tr>
+  {% for r in rows %}
+  <tr><td class="id"><a href="/asset/{{ r.id }}">{{ r.id }}</a></td><td class="id">{{ r.hostname }}</td>
+      <td class="id dim">{{ r.fqdn }}</td><td class="id dim">{{ r.asset_tag }}</td>
+      <td class="id dim">{{ r.ip }}</td><td>{{ r.kind }}</td><td class="dim">{{ r.owner_name or '—' }}</td></tr>
+  {% endfor %}
+</table></div>
+
+{% elif tab == 'controls' %}
+<form class="filters" method="get">
+  <input type="hidden" name="tab" value="controls">
+  <input name="q" value="{{ q }}" placeholder="ref or title" size="28">
+  <button type="submit">Filter</button>
+</form>
+<div class="wrap"><table>
+  <tr><th>Ref</th><th>Title</th><th>Last tested</th><th>Effectiveness</th>
+      <th class="num">Overdue</th><th class="num">Evidence</th><th>Owner</th></tr>
+  {% for c in rows %}
+  <tr><td class="id"><a href="/spine/control/{{ c.id }}">{{ c.ref }}</a></td><td>{{ c.title }}</td>
+      <td class="id dim">{{ c.last_tested_on or '—' }}</td>
+      <td>{% if not c.last_result %}<span class="void">never assessed</span>
+          {% elif c.last_result == 'effective' and c.overdue_findings %}<span class="tag conflict">effective ⚠</span>
+          {% else %}{{ c.last_result }}{% endif %}</td>
+      <td class="num">{{ c.overdue_findings }}</td><td class="num">{{ c.evidence_rows }}</td>
+      <td class="dim">{{ c.owner_name or '—' }}{% if c.owner_ended_on %} <span class="tag conflict">left</span>{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+
+{% else %}
+<div class="wrap"><table style="margin-top:20px">
+  <tr><th>Service</th><th>Name</th><th>Tier</th><th class="num">Daily revenue</th><th>Owner</th></tr>
+  {% for s in rows %}
+  <tr><td class="id"><a href="/spine/service/{{ s.id }}">{{ s.id }}</a></td><td>{{ s.name }}</td>
+      <td>{{ s.criticality }}</td><td class="num">{{ "{:,.0f}".format(s.daily_revenue) }}</td>
+      <td class="dim">{{ s.owner_name or '—' }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+{% endblock %}

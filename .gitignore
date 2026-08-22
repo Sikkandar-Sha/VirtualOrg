@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+seeds/*.dump
+!seeds/.gitkeep
+
+# local overrides
+docker-compose.override.yml
+.DS_Store
+*.log

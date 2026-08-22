@@ -1,0 +1,20 @@
+{
+  "realm": "virtualorg",
+  "enabled": true,
+  "accessTokenLifespan": 300,
+  "sslRequired": "none",
+  "clients": [
+    {
+      "clientId": "vo-kit",
+      "name": "Kit under test",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "secret": "vo-kit-secret",
+      "attributes": { "access.token.lifespan": "300" }
+    }
+  ]
+}

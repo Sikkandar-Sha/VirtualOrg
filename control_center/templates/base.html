@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Control Center{% endblock %} — VirtualOrg</title>
+<link rel="stylesheet" href="/static/app.css?v={{ v }}">
+<script>
+/* Applied before first paint so the chosen theme never flashes. Storage can throw
+   in a private window or with site data blocked — the page must still render. */
+try {
+  var t = localStorage.getItem("vo-theme");
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+} catch (e) {}
+</script>
+</head>
+<body>
+<div class="shell">
+  <nav class="rail">
+    <div class="brand">
+      <b>VirtualOrg</b>
+      <span>Control Center</span>
+    </div>
+    <h6>Surfaces</h6>
+    {% for href, label, n in surfaces %}
+      <a href="{{ href }}" {% if path == href or (href != '/' and path.startswith(href)) %}aria-current="page"{% endif %}>
+        <span>{{ label }}</span><i>{{ n }}</i>
+      </a>
+    {% endfor %}
+    <h6>Appearance</h6>
+    <div class="theme">
+      <button type="button" data-set="light">Light</button>
+      <button type="button" data-set="dark">Dark</button>
+      <button type="button" data-set="system">System</button>
+    </div>
+
+    <h6>World</h6>
+    <span class="meta"><span>seed</span><i>{{ meta.seed }}</i></span>
+    <span class="meta"><span>as of</span><i>{{ meta.as_of }}</i></span>
+    <span class="meta"><span>scale</span><i>{{ meta.scale }}</i></span>
+  </nav>
+  <main>
+    {% block body %}{% endblock %}
+  </main>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  var btns = document.querySelectorAll(".theme button");
+  function paint() {
+    var cur = root.dataset.theme || "system";
+    btns.forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.set === cur); });
+  }
+  btns.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var v = b.dataset.set;
+      if (v === "system") { delete root.dataset.theme; } else { root.dataset.theme = v; }
+      try { v === "system" ? localStorage.removeItem("vo-theme")
+                           : localStorage.setItem("vo-theme", v); } catch (e) {}
+      paint();
+    });
+  });
+  paint();
+})();
+</script>
+</body>
+</html>

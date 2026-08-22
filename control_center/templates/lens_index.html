@@ -1,0 +1,34 @@
+{% extends "base.html" %}{% block title %}The lenses{% endblock %}
+{% block body %}
+<div class="eyebrow">Surface 3 · the lenses</div>
+<h1>Three views, one world</h1>
+<p class="lede">A lens is a scope query, a loss profile and a response shape. No two name
+  the same asset the same way, and no lens sees all of it — that is what manufactures the
+  correlation, conflict and coverage-gap problems the kit exists to solve.</p>
+
+{% for l in lenses %}
+<h2>{{ l.vendor }} <span class="dim">/ {{ l.id }} · {{ l.category }}</span></h2>
+<div class="wrap"><table>
+  <tr>
+    <td class="dim" style="width:150px">identifies by</td><td><b>{{ l.identifier_style }}</b></td>
+    <td class="dim" style="width:150px">coverage</td><td>{{ (l.coverage * 100) | round | int }}%</td>
+  </tr>
+  <tr>
+    <td class="dim">sync latency</td><td>{{ l.latency_minutes }} min</td>
+    <td class="dim">retention</td><td>{{ l.retention_days }} days</td>
+  </tr>
+  <tr>
+    <td class="dim">structurally blind to</td><td colspan="3">{{ l.blind_spot }}</td>
+  </tr>
+</table></div>
+<p style="margin-top:10px"><a href="/lenses/{{ l.id }}">Open the try-it console →</a></p>
+{% endfor %}
+
+<h2>What each lens has visibility of</h2>
+<div class="wrap"><table>
+  <tr><th>Lens</th><th>Entity kind</th><th class="num">Entities visible</th></tr>
+  {% for c in counts %}
+  <tr><td class="id">{{ c.lens_id }}</td><td>{{ c.entity_kind }}</td><td class="num">{{ "{:,}".format(c.n) }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

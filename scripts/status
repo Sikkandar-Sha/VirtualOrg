@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Is everything running? The terminal answer to the same question the Control Center
+# status surface answers in a browser. Probes each service the way a consumer would.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+TOKEN="${VO_TOKEN:-vo-dev-token}"
+TWIN="${VO_BASE:-http://127.0.0.1:8080}"
+CC="${VO_CC_BASE:-http://127.0.0.1:3000}"
+KC="${VO_KEYCLOAK_BASE:-http://127.0.0.1:8081}"
+WM="${VO_WIREMOCK_BASE:-http://127.0.0.1:8090}"
+DSN="${VO_DSN:-postgresql://vo@127.0.0.1:5433/world}"
+fail=0
+
+row() { printf "  %-16s %-9s %s\n" "$1" "$2" "${3:-}"; }
+
+probe() { # name url expected [optional]
+  code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 -H "Authorization: Bearer $TOKEN" "$2" 2>/dev/null)
+  if [ "$code" = "$3" ]; then row "$1" "up" "HTTP $code"
+  elif [ -n "${4:-}" ]; then
+    [ "$code" = "000" ] && row "$1" "off" "not started" || row "$1" "off" "HTTP $code"
+  else row "$1" "DOWN" "HTTP $code"; fail=1; fi
+}
+
+echo "VirtualOrg status"
+echo
+echo "Services"
+if command -v psql >/dev/null 2>&1; then
+  n=$(psql "$DSN" -tAc "SELECT count(*) FROM world.asset" 2>/dev/null)
+  if [ -n "$n" ]; then row "world-db" "up" "$n assets"; else row "world-db" "DOWN" "unreachable"; fail=1; fi
+else
+  # no psql on this host — ask the Control Center, which holds the only other
+  # connection to world-db, rather than reporting a state we have not checked
+  det=$(curl -s -m 5 "$CC/healthz" 2>/dev/null | sed -n 's/.*"name":"world-db","state":"\([a-z]*\)","detail":"\([^"]*\)".*/\1 \2/p')
+  if [ -n "$det" ]; then
+    st=${det%% *}; msg=${det#* }
+    [ "$st" = "up" ] && row "world-db" "up" "$msg (via control-center)" \
+                     || { row "world-db" "DOWN" "$msg"; fail=1; }
+  else
+    row "world-db" "?" "install psql or start control-center to check"
+  fi
+fi
+probe "twin-gateway"   "$TWIN/healthz" 200
+probe "control-center" "$CC/healthz"   200
+probe "keycloak"       "$KC/realms/master" 200 optional
+probe "wiremock"       "$WM/__admin/mappings" 200 optional
+
+echo
+echo "Lenses (as a connector calls them)"
+probe "servicenow" "$TWIN/servicenow/api/now/table/cmdb_ci_computer?sysparm_limit=1" 200
+probe "grc"        "$TWIN/grc/api/v1/controls?limit=1" 200
+probe "iam"        "$TWIN/iam/api/v1/users?limit=1" 200
+probe "scanner"    "$TWIN/scanner/api/v3/findings?limit=1" 200
+probe "hr"         "$TWIN/hr/api/v1/workers?per_page=1" 200
+probe "edr"        "$TWIN/edr/devices/queries/devices/v1?limit=1" 200
+sid=$(curl -s -m 10 -H "Authorization: Bearer $TOKEN" -d "search=search index=main" \
+      "$TWIN/splunk/services/search/jobs" 2>/dev/null | sed -n 's/.*"sid":"\([^"]*\)".*/\1/p')
+if [ -n "$sid" ]; then
+  curl -s -o /dev/null -H "Authorization: Bearer $TOKEN" "$TWIN/splunk/services/search/jobs/$sid"
+  done_state=$(curl -s -H "Authorization: Bearer $TOKEN" "$TWIN/splunk/services/search/jobs/$sid" | grep -c '"isDone":true')
+  if [ "$done_state" = "1" ]; then row "splunk" "up" "job $sid completes"
+  else row "splunk" "DOWN" "job never reaches DONE"; fail=1; fi
+else
+  row "splunk" "DOWN" "job submit failed"; fail=1
+fi
+
+echo
+if command -v psql >/dev/null 2>&1; then
+  echo "World"
+  psql "$DSN" -tAc "SELECT '  seed=' || max(value) FILTER (WHERE key='seed') ||
+                    '  as_of=' || max(value) FILTER (WHERE key='as_of') ||
+                    '  scale=' || max(value) FILTER (WHERE key='scale') FROM world.world_meta" 2>/dev/null
+  echo
+fi
+
+if [ "$fail" = "0" ]; then
+  echo "everything required is up  ·  Control Center: $CC"
+else
+  echo "one or more required services are down"
+fi
+exit $fail

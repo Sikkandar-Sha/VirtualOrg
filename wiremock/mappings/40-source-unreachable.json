@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "scenarioName": "snow-unreachable",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "recovered",
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/servicenow/api/now/table/cmdb_ci_computer"
+  },
+  "response": {
+    "fault": "CONNECTION_RESET_BY_PEER"
+  }
+}

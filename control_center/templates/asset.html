@@ -1,0 +1,105 @@
+{% extends "base.html" %}{% block title %}{{ a.id }}{% endblock %}
+{% block body %}
+<div class="crumb"><a href="/asset">Surface 1 · one entity, every lens</a></div>
+<div class="hd">
+  <div>
+    <h1>{{ a.id }}</h1>
+    <p class="lede">{{ a.kind }} · {{ a.os_family }} {{ a.os_version }} · criticality
+      {{ a.criticality }}{% if a.decommissioned_on %} · decommissioned {{ a.decommissioned_on }}{% endif %}</p>
+  </div>
+</div>
+
+{% set seen = bands | rejectattr('blind') | list %}
+{% set idents = seen | map(attribute='external_id') | unique | list %}
+
+<h2>What each lens calls it</h2>
+<div class="strip">
+  <div class="band head">
+    <span>Source</span><span>Class</span><span>Calls it</span>
+    <span>Last seen</span><span>Coverage</span>
+  </div>
+{% for b in bands %}
+  <div class="band {% if b.blind %}blind{% endif %}">
+    <span class="vendor">{{ b.vendor }}</span>
+    <span class="cat">{{ b.category }}</span>
+    {% if b.blind %}
+      <span class="void">not visible to this lens</span>
+    {% else %}
+      <span class="ident">{{ b.external_id }}</span>
+    {% endif %}
+    <span class="seen">{% if b.blind %}—{% else %}{{ b.stale_h }}h ago{% endif %}</span>
+    <span class="cov">
+      <span class="pct">{{ (b.coverage * 100) | round | int }}%</span>
+      <span class="bar">
+        {# floor, not round: 97% must not render as a full bar. Partial coverage
+           looking complete is the exact misreading this whole screen exists to prevent. #}
+        {% set filled = (b.coverage * 10) | int %}
+        {% for i in range(10) %}<i class="{% if i < filled %}on{% endif %}"></i>{% endfor %}
+      </span>
+    </span>
+  </div>
+{% endfor %}
+</div>
+
+<div class="verdict">
+  <div class="eyebrow">Truth</div>
+  <p>
+    One machine. {{ idents | length }} identifier{{ '' if idents|length == 1 else 's' }}
+    across {{ seen | length }} of {{ bands | length }} lenses.
+    {%- if bands | selectattr('blind') | list %}
+      {{ bands | selectattr('blind') | map(attribute='vendor') | join(', ') }}
+      {{ 'is' if bands|selectattr('blind')|list|length == 1 else 'are' }} blind to it.
+    {%- endif %}
+    {%- if a.owner_ended_on %} The owner of record, {{ a.owner_name }}, left the company on
+      {{ a.owner_ended_on }} — no lens knows that.{% endif %}
+    {%- if not seen %} No lens sees this machine at all.{% endif %}
+  </p>
+</div>
+
+<div class="cols">
+<div>
+  <h2>World state</h2>
+  <table>
+    <tr><td class="dim">Hostname</td><td class="id">{{ a.hostname }}</td></tr>
+    <tr><td class="dim">FQDN</td><td class="id">{{ a.fqdn }}</td></tr>
+    <tr><td class="dim">Asset tag</td><td class="id">{{ a.asset_tag }}</td></tr>
+    <tr><td class="dim">IP address</td><td class="id">{{ a.ip }}</td></tr>
+    <tr><td class="dim">Owner</td><td>
+      {% if a.owner_id %}<a href="/org/person/{{ a.owner_id }}">{{ a.owner_name }}</a>
+        {% if a.owner_ended_on %}<span class="tag conflict">left {{ a.owner_ended_on }}</span>{% endif %}
+      {% else %}<span class="void">no owner of record</span>{% endif %}</td></tr>
+    <tr><td class="dim">Procured</td><td class="id">{{ a.procured_on }}</td></tr>
+    <tr><td class="dim">Alerts, all time</td><td class="num">{{ "{:,}".format(alerts) }}</td></tr>
+  </table>
+
+  {% if expectations %}
+  <h2>Ground truth on this asset</h2>
+  <table>
+    {% for e in expectations %}
+    <tr><td><span class="tag conflict">{{ e.family }}</span></td><td>{{ e.claim }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+<div>
+  <h2>Applications on it</h2>
+  {% if apps %}
+  <table>
+    {% for ap in apps %}
+    <tr><td class="id">{{ ap.id }}</td><td>{{ ap.name }}</td><td class="dim">{{ ap.criticality }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<span class="void">no application runs on this machine</span>{% endif %}
+
+  <h2>Open vulnerabilities</h2>
+  {% if vulns %}
+  <table>
+    <tr><th>CVE</th><th class="num">CVSS</th><th>Found</th></tr>
+    {% for v in vulns %}
+    <tr><td class="id">{{ v.cve }}</td><td class="num">{{ v.cvss }}</td><td class="id dim">{{ v.discovered_on }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<span class="void">none open</span>{% endif %}
+</div>
+</div>
+{% endblock %}

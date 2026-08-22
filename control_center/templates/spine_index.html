@@ -1,0 +1,77 @@
+{% extends "base.html" %}{% block title %}The spine{% endblock %}
+{% block body %}
+<div class="eyebrow">Surface 2 · the spine</div>
+<h1>Framework → Control → Evidence → Asset → Service</h1>
+<p class="lede">All four of the kit's outputs are traversals of one graph. Enter from the
+  top through a service, or from the bottom through a control.</p>
+
+{% set broken = gaps | selectattr('n') | list %}
+{% if broken %}
+<h2>Where this graph breaks</h2>
+<p class="note">Counted live across tables, not per table. A gap marked
+  <span class="tag conflict">invisible</span> cannot be expressed through the vendor APIs at
+  all, so the kit can never be asked to find it.
+  <a href="/manual?ch=gaps">Full breakdown with the SQL →</a></p>
+<div class="wrap"><table>
+  <tr><th>Gap</th><th class="num">Count</th><th class="unit"></th><th class="num">Total</th><th>API</th></tr>
+  {% for g in broken %}
+  <tr><td>{{ g.label }}</td><td class="num">{{ "{:,}".format(g.n) }}</td>
+      <td class="unit">of</td><td class="num dim">{{ "{:,}".format(g.total) }}</td>
+      <td>{% if g.api_visible %}<span class="tag ok">visible</span>
+          {% else %}<span class="tag conflict">invisible</span>{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2>Business processes</h2>
+<p class="note">The top of the spine. Everything below exists to keep these running.</p>
+<div class="wrap"><table>
+  <tr><th>Process</th><th>Criticality</th><th class="num">RTO</th><th class="unit"></th>
+      <th class="num">Services</th><th>Owner</th></tr>
+  {% for b in processes %}
+  <tr><td>{{ b.name }}</td>
+      <td>{% if b.criticality == 'critical' %}<span class="tag">{{ b.criticality }}</span>
+          {% else %}{{ b.criticality }}{% endif %}</td>
+      <td class="num">{{ b.rto_hours }}</td><td class="unit">h</td>
+      <td class="num">{{ b.services }}</td>
+      <td class="dim">{{ b.owner_name or '—' }}{% if b.owner_ended_on %} <span class="tag conflict">left</span>{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>Business services</h2>
+<div class="wrap"><table>
+  <tr><th>Service</th><th>Name</th><th>Tier</th><th class="num">Daily revenue</th><th>Owner</th></tr>
+  {% for s in services %}
+  <tr>
+    <td class="id"><a href="/spine/service/{{ s.id }}">{{ s.id }}</a></td>
+    <td>{{ s.name }}</td>
+    <td>{% if s.criticality == 'tier1' %}<span class="tag">{{ s.criticality }}</span>{% else %}{{ s.criticality }}{% endif %}</td>
+    <td class="num">{{ "{:,.0f}".format(s.daily_revenue) }}</td>
+    <td class="dim">{{ s.owner_name or '—' }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+<h2>Controls</h2>
+<div class="wrap"><table>
+  <tr><th>Ref</th><th>Title</th><th>Frequency</th><th>Last tested</th><th>Effectiveness</th>
+      <th class="num">Overdue</th><th class="num">Evidence</th><th>Owner</th></tr>
+  {% for c in controls %}
+  <tr>
+    <td class="id"><a href="/spine/control/{{ c.id }}">{{ c.ref }}</a></td>
+    <td>{{ c.title }}</td>
+    <td class="dim">{{ c.test_frequency }}</td>
+    <td class="id dim">{{ c.last_tested_on or '—' }}</td>
+    <td>
+      {% if not c.last_result %}<span class="void">never assessed</span>
+      {% elif c.last_result == 'effective' and c.overdue_findings %}
+        <span class="tag conflict">effective ⚠ {{ c.overdue_findings }} overdue</span>
+      {% else %}{{ c.last_result }}{% endif %}
+    </td>
+    <td class="num">{{ c.overdue_findings }}</td>
+    <td class="num">{{ c.evidence_rows }}</td>
+    <td class="dim">{{ c.owner_name or '—' }}{% if c.owner_ended_on %} <span class="tag conflict">left</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

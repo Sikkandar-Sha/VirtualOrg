@@ -1,0 +1,47 @@
+{% extends "base.html" %}{% block title %}{{ p.full_name }}{% endblock %}
+{% block body %}
+<div class="crumb"><a href="/org?tab=people">Surface 4 · the org</a></div>
+<h1>{{ p.full_name }}</h1>
+<p class="lede">{{ p.id }} · {{ p.title }}, {{ p.department }} · {{ p.employment }} ·
+  started {{ p.started_on }}{% if p.ended_on %} · <b>left {{ p.ended_on }}</b>{% endif %}</p>
+
+{% if expectations %}
+<div class="verdict" style="border-left-color:var(--flag)">
+  <div class="eyebrow">Ground truth on this person</div>
+  {% for e in expectations %}<p>{{ e.claim }}</p>{% endfor %}
+</div>
+{% endif %}
+
+<h2>Accounts</h2>
+<div class="wrap"><table>
+  <tr><th>ID</th><th>System</th><th>Username</th><th>Privileged</th><th>Created</th><th>Disabled</th></tr>
+  {% for a in accounts %}
+  <tr><td class="id dim">{{ a.id }}</td><td>{{ a.system }}</td><td class="id">{{ a.username }}</td>
+      <td>{{ 'yes' if a.privileged else 'no' }}</td><td class="id dim">{{ a.created_on }}</td>
+      <td>{% if a.disabled_on %}{{ a.disabled_on }}
+          {% elif p.ended_on %}<span class="tag conflict">still enabled</span>
+          {% else %}<span class="dim">—</span>{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+
+<div class="cols">
+{% for label, rows in [('Assets owned', owns.assets), ('Controls owned', owns.controls),
+                       ('Risks owned', owns.risks), ('Services owned', owns.services)] %}
+{% if rows %}
+<div>
+  <h2>{{ label }}</h2>
+  <table>
+    {% for r in rows %}
+    <tr><td>
+      {%- if label.startswith('Assets') %}<a href="/asset/{{ r.id }}">{{ r.id }}</a>
+      {%- elif label.startswith('Controls') %}<a href="/spine/control/{{ r.id }}">{{ r.ref }}</a>
+      {%- elif label.startswith('Services') %}<a href="/spine/service/{{ r.id }}">{{ r.id }}</a>
+      {%- else %}{{ r.ref }}{% endif -%}
+    </td><td class="dim">{{ r.title if r.title is defined else (r.name if r.name is defined else (r.hostname if r.hostname is defined else '')) }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endfor %}
+</div>
+{% endblock %}

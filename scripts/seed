@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Regenerate the world from scratch, then snapshot it as a restorable baseline.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+NAME="${1:-baseline}"
+DSN="${VO_DSN:-postgresql://vo@127.0.0.1:5433/world}"
+
+echo "==> schema"
+psql "$DSN" -q -f world/schema.sql
+echo "==> generate (seed=${VO_SEED:-48392} as_of=${VO_AS_OF:-2026-08-21} scale=${VO_SCALE:-1.0})"
+python3 world/generate.py --dsn "$DSN" --seed "${VO_SEED:-48392}" \
+        --as-of "${VO_AS_OF:-2026-08-21}" --scale "${VO_SCALE:-1.0}"
+exec "$(dirname "$0")/snapshot" "$NAME"

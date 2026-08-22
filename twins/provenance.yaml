@@ -1,0 +1,142 @@
+# Provenance manifest — DESIGN.md §5, "the standing hazard".
+#
+# With no vendor product in the loop, every claim of correctness rests on twin
+# fidelity. Nothing in this environment can tell you we have misread a vendor's
+# pagination: the connector and the twin will be wrong together, forever, in green
+# CI. The only defence is to record honestly where each response shape came from.
+#
+# basis:
+#   model            written from our understanding of the documented behaviour.
+#                    No vendor artefact was consulted directly. NOT evidence.
+#   doc-example      copied from an example in the vendor's published docs.
+#   openapi-spec     derived from the vendor's machine-readable spec.
+#   captured-sandbox recorded from a real call to a vendor developer tenant.
+#
+# status is `verified` only when every endpoint has basis openapi-spec or
+# captured-sandbox AND a capture date. Anything else is `unverified`, and its
+# passing tests do not count as certification.
+
+servicenow:
+  vendor: ServiceNow
+  product: ITSM and CMDB, Table API
+  api_version: "Table API v2"
+  basis: model
+  captured_on: null
+  notes: >
+    Offset pagination, the {"result": [...]} envelope and the X-Total-Count header
+    are modelled on the documented Table API. Customer profiles are invented to
+    represent the field-renaming that real instances exhibit; no instance was read.
+    cmdb_rel_ci uses the parent/child/type shape and the "Depends on::Used by"
+    naming convention, but the relationship type catalogue is not reproduced.
+  endpoints:
+    - {path: "/servicenow/api/now/table/incident", basis: model}
+    - {path: "/servicenow/api/now/table/cmdb_ci_computer", basis: model}
+    - {path: "/servicenow/api/now/table/cmdb_ci_appl", basis: model}
+    - {path: "/servicenow/api/now/table/cmdb_ci_service", basis: model}
+    - {path: "/servicenow/api/now/table/cmdb_rel_ci", basis: model}
+    - {path: "/servicenow/api/now/table/cmdb_ci_business_process", basis: model}
+    - {path: "/servicenow/api/now/table/cmdb_sam_sw_install", basis: model}
+
+splunk:
+  vendor: Splunk
+  product: Enterprise, search jobs REST API
+  api_version: "services/search/jobs"
+  basis: model
+  captured_on: null
+  notes: >
+    The submit -> poll -> fetch lifecycle, the {"entry": [{"content": {...}}]}
+    status envelope and dispatchState/isDone/doneProgress are modelled on the
+    documented job API. Real Splunk defaults to XML unless output_mode=json is
+    passed; this twin always returns JSON, which is a known divergence.
+  endpoints:
+    - {path: "POST /splunk/services/search/jobs", basis: model}
+    - {path: "GET /splunk/services/search/jobs/{sid}", basis: model}
+    - {path: "GET /splunk/services/search/jobs/{sid}/results", basis: model}
+
+grc:
+  vendor: Onspring
+  product: GRC platform, configured object model
+  api_version: "v1 (representative)"
+  basis: model
+  captured_on: null
+  notes: >
+    Entirely representative. GRC platforms are configured object models rather than
+    fixed schemas, so there is no single vendor shape to be faithful to — but that
+    also means this twin cannot be certified against one. Opaque base64 cursors and
+    the {items, next_cursor, total} envelope are our convention, not a vendor's.
+  endpoints:
+    - {path: "/grc/api/v1/controls", basis: model}
+    - {path: "/grc/api/v1/assets", basis: model}
+    - {path: "/grc/api/v1/findings", basis: model}
+    - {path: "/grc/api/v1/risks", basis: model}
+    - {path: "/grc/api/v1/control-mappings", basis: model}
+    - {path: "/grc/api/v1/frameworks", basis: model}
+    - {path: "/grc/api/v1/requirements", basis: model}
+    - {path: "/grc/api/v1/crosswalks", basis: model}
+    - {path: "/grc/api/v1/findings/{id}/attachments", basis: model}
+    - {path: "/grc/api/v1/attachments/{id}/content", basis: model}
+    - {path: "/grc/api/v1/policies", basis: model}
+    - {path: "/grc/api/v1/exceptions", basis: model}
+    - {path: "/grc/api/v1/treatments", basis: model}
+
+iam:
+  vendor: Okta
+  product: Identity provider, Users API
+  api_version: "/api/v1"
+  basis: model
+  captured_on: null
+  notes: >
+    The user envelope (id, status, profile.login, profile.email) and the RFC 5988
+    Link header with rel="self" and rel="next" are modelled on the documented Users
+    API. Real Okta cursors are opaque and its filter grammar is SCIM-like and far
+    richer than the single `status eq "..."` form supported here.
+  endpoints:
+    - {path: "/iam/api/v1/users", basis: model}
+    - {path: "/iam/api/v1/users/{login}", basis: model}
+    - {path: "/iam/api/v1/groups", basis: model}
+    - {path: "/iam/api/v1/users/{login}/groups", basis: model}
+
+scanner:
+  vendor: Tenable
+  product: Vulnerability management
+  api_version: "v3 (representative)"
+  basis: model
+  captured_on: null
+  notes: >
+    Incremental polling by `since` with a `next_since` checkpoint is a
+    representative shape, not Tenable's. Real Tenable exports findings through an
+    asynchronous chunked export job, which is a materially different connector
+    pattern from the one this twin exercises. Treat this as the weakest twin here.
+  endpoints:
+    - {path: "/scanner/api/v3/findings", basis: model}
+    - {path: "/scanner/api/v3/assets", basis: model}
+    - {path: "/scanner/api/v3/misconfigurations", basis: model}
+
+hr:
+  vendor: Workday
+  product: HCM, Workers
+  api_version: "v1 (representative)"
+  basis: model
+  captured_on: null
+  notes: >
+    Representative. Real Workday exposes workers through WQL, RaaS reports or a
+    SOAP Human_Resources service, none of which look like this page/per_page REST
+    envelope. The worker record fields are modelled on Workday's vocabulary
+    (legal_name, worker_type, cost_center) but the transport is invented.
+  endpoints:
+    - {path: "/hr/api/v1/workers", basis: model}
+
+edr:
+  vendor: CrowdStrike
+  product: Falcon, device management
+  api_version: "devices v1/v2"
+  basis: model
+  captured_on: null
+  notes: >
+    The two-step query-then-hydrate pattern, the {resources, meta.pagination, errors}
+    envelope and the device fields are modelled on the documented Falcon device APIs.
+    Real Falcon uses OAuth2 bearer tokens from /oauth2/token with a 30-minute expiry
+    and enforces a hard cap on ids per hydrate call; neither is reproduced here.
+  endpoints:
+    - {path: "/edr/devices/queries/devices/v1", basis: model}
+    - {path: "/edr/devices/entities/devices/v2", basis: model}

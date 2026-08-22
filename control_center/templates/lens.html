@@ -1,0 +1,55 @@
+{% extends "base.html" %}{% block title %}{{ l.vendor }}{% endblock %}
+{% block body %}
+<div class="crumb"><a href="/lenses">Surface 3 · the lenses</a></div>
+<h1>{{ l.vendor }}</h1>
+<p class="lede">{{ l.category }} lens. Calls every asset by its <b>{{ l.identifier_style }}</b>,
+  sees {{ (l.coverage * 100) | round | int }}% of them, and is structurally blind to
+  {{ l.blind_spot }}.</p>
+
+<h2>Window on the world</h2>
+<div class="status">
+  <div><div class="k">World now</div><div class="v">{{ now.strftime('%Y-%m-%d %H:%M') }}</div></div>
+  <div><div class="k">Newest it can see</div><div class="v">{{ horizon.strftime('%Y-%m-%d %H:%M') }}
+    <small>−{{ l.latency_minutes }}m</small></div></div>
+  <div><div class="k">Oldest it retains</div><div class="v">{{ floor.strftime('%Y-%m-%d') }}
+    <small>−{{ l.retention_days }}d</small></div></div>
+  <div><div class="k">Entities</div><div class="v">{{ counts | sum(attribute='n') }}</div></div>
+</div>
+
+{% if prov %}
+<h2>Where this twin's shapes came from</h2>
+<div class="wrap"><table>
+  <tr><td class="dim" style="width:170px">Status</td>
+      <td>{% if prov.status == 'verified' %}<span class="tag ok">verified</span>
+          {% else %}<span class="tag conflict">unverified</span>{% endif %}</td>
+      <td class="dim" style="width:150px">Basis</td><td>{{ prov.basis }}</td></tr>
+  <tr><td class="dim">Vendor API</td><td>{{ prov.api_version }}</td>
+      <td class="dim">Captured on</td><td>{{ prov.captured_on or 'never' }}</td></tr>
+</table></div>
+<p class="note">{{ prov.notes }}</p>
+{% endif %}
+
+<h2>Try it against the live twin</h2>
+<p class="note">These execute against <code>twin-gateway</code> exactly as a connector would.
+  The response below is unedited.</p>
+<form class="filters" method="get">
+  <select name="call">
+    {% for method, path, params in calls %}
+    <option value="{{ loop.index0 }}" {% if selected == loop.index0|string %}selected{% endif %}>{{ method }} {{ path }}</option>
+    {% endfor %}
+  </select>
+  {% if l.id == 'servicenow' %}
+  <select name="profile">
+    {% for p in profiles %}
+    <option value="{{ p }}" {% if profile == p %}selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+  <button type="submit">Send request</button>
+</form>
+
+{% if result %}
+<p class="note"><b>HTTP {{ result.status }}</b> · <code>{{ result.url }}</code></p>
+<pre>{{ result.body }}</pre>
+{% endif %}
+{% endblock %}

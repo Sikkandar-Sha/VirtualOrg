@@ -1,0 +1,128 @@
+# VirtualOrg — the whole synthetic enterprise.
+#
+#   docker compose up -d              VirtualOrg only; run your kit from your IDE
+#   docker compose --profile ci up -d adds the kit under test (CI)
+#   docker compose --profile chaos up -d  puts WireMock in front of a twin
+#
+# The kit is deliberately NOT a default service: developers need a debugger
+# attached to it, and a rebuild-per-edit cycle is the wrong trade. (DESIGN.md §2)
+
+name: virtualorg
+
+services:
+  world-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vo}
+      POSTGRES_DB: ${POSTGRES_DB:-world}
+    volumes:
+      - world-data:/var/lib/postgresql/data
+      - ./seeds:/seeds
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vo} -d ${POSTGRES_DB:-world}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    mem_limit: 2g
+
+  # One-shot: applies the schema and generates the world, then exits.
+  world-engine:
+    build: .
+    depends_on:
+      world-db: {condition: service_healthy}
+    environment:
+      VO_DSN: postgresql://${POSTGRES_USER:-vo}:${POSTGRES_PASSWORD:-vo}@world-db:5432/${POSTGRES_DB:-world}
+    command: >
+      sh -c "python -c \"import os,psycopg2;c=psycopg2.connect(os.environ['VO_DSN']);c.autocommit=True;c.cursor().execute(open('world/schema.sql').read())\" &&
+      python world/generate.py --dsn $$VO_DSN --seed ${VO_SEED:-48392}
+      --as-of ${VO_AS_OF:-2026-08-21} --scale ${VO_SCALE:-1.0}
+      --chaos ${VO_CHAOS:-1}"
+    restart: "no"
+    mem_limit: 1g
+
+  twin-gateway:
+    build: .
+    depends_on:
+      world-engine: {condition: service_completed_successfully}
+    environment:
+      VO_DSN: postgresql://${POSTGRES_USER:-vo}:${POSTGRES_PASSWORD:-vo}@world-db:5432/${POSTGRES_DB:-world}
+      VO_TOKENS: ${VO_TOKENS:-vo-dev-token}
+      VO_AUTH_MODE: ${VO_AUTH_MODE:-static}
+      VO_PROFILE_SERVICENOW: ${VO_PROFILE_SERVICENOW:-out-of-the-box}
+      VO_JWKS_URL: ${VO_JWKS_URL:-http://keycloak:8080/realms/virtualorg/protocol/openid-connect/certs}
+      VO_JWT_ISSUER: ${VO_JWT_ISSUER:-http://localhost:8081/realms/virtualorg}
+      VO_JWT_AUDIENCE: ${VO_JWT_AUDIENCE:-account}
+    ports: ["8080:8080"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import httpx;httpx.get('http://localhost:8080/healthz').raise_for_status()\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    mem_limit: 1g
+
+  # Phase 3. Read-only over world-db and the twins; computes nothing. (DESIGN.md §8)
+  control-center:
+    build: .
+    depends_on:
+      world-engine: {condition: service_completed_successfully}
+    environment:
+      VO_DSN: postgresql://${POSTGRES_USER:-vo}:${POSTGRES_PASSWORD:-vo}@world-db:5432/${POSTGRES_DB:-world}
+      VO_TWIN_BASE: http://twin-gateway:8080
+      VO_KEYCLOAK_BASE: http://keycloak:8080
+      VO_WIREMOCK_BASE: http://wiremock:8080
+      VO_TOKEN: ${VO_TOKENS:-vo-dev-token}
+      VO_CC_PORT: ${VO_CC_PORT:-3000}
+    command: ["uvicorn", "control_center.app:app", "--host", "0.0.0.0", "--port", "3000"]
+    ports: ["${VO_CC_PORT:-3000}:3000"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import httpx;httpx.get('http://localhost:3000/healthz').raise_for_status()\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    mem_limit: 1g
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      # Pin the issuer. Keycloak otherwise derives `iss` from the request host, so a
+      # token fetched on localhost:8081 could never satisfy a twin that expects
+      # keycloak:8080 — the same mismatch self-hosted customers hit for real.
+      KC_HOSTNAME: http://localhost:8081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    ports: ["8081:8080"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /realms/virtualorg HTTP/1.1\nhost: localhost\n\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    mem_limit: 1g
+
+  # Adversarial layer. Twins never misbehave; WireMock does. (DESIGN.md §2)
+  wiremock:
+    profiles: ["chaos"]
+    image: wiremock/wiremock:3.10.0
+    command: ["--global-response-templating", "--verbose"]
+    volumes:
+      - ./wiremock:/home/wiremock
+    ports: ["8090:8080"]
+    mem_limit: 512m
+
+  # The kit under test — CI only.
+  # kit:
+  #   profiles: ["ci"]
+  #   build: ../your-risk-kit
+  #   depends_on:
+  #     twin-gateway: {condition: service_healthy}
+  #   command: ["--config", "/config/virtualorg"]
+  #   volumes: ["./config/virtualorg:/config/virtualorg:ro"]
+
+volumes:
+  world-data:

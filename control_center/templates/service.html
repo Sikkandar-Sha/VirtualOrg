@@ -1,0 +1,60 @@
+{% extends "base.html" %}{% block title %}{{ s.name }}{% endblock %}
+{% block body %}
+<div class="crumb"><a href="/spine">Surface 2 · the spine</a></div>
+<h1>{{ s.name }}</h1>
+<p class="lede">{{ s.id }} · {{ s.criticality }} · {{ "{:,.0f}".format(s.daily_revenue) }} daily revenue ·
+  owner {{ s.owner_name or 'none of record' }}
+  {%- if s.owner_ended_on %} <span class="tag conflict">left {{ s.owner_ended_on }}</span>{% endif %}</p>
+
+<div class="cols">
+<div>
+  <h2>Business processes it carries</h2>
+  {% if processes %}
+  <table>
+    {% for b in processes %}
+    <tr><td>{{ b.name }}</td><td class="dim">{{ b.criticality }}</td>
+        <td class="num">{{ b.rto_hours }}</td><td class="unit">h RTO</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<span class="void">no business process depends on this service</span>{% endif %}
+
+  <h2>Applications it depends on</h2>
+  <table>
+    {% for a in apps %}
+    <tr><td class="id">{{ a.id }}</td><td>{{ a.name }}</td><td class="dim">{{ a.criticality }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <h2>Assets underneath ({{ assets|length }})</h2>
+  <div class="wrap"><table>
+    <tr><th>Asset</th><th>Hostname</th><th>Kind</th><th>IP</th><th>Criticality</th></tr>
+    {% for a in assets %}
+    <tr><td class="id"><a href="/asset/{{ a.id }}">{{ a.id }}</a></td><td class="id">{{ a.hostname }}</td>
+        <td class="dim">{{ a.kind }}</td><td class="id dim">{{ a.ip }}</td><td>{{ a.criticality }}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+<div>
+  <h2>Risks attached</h2>
+  <div class="wrap"><table>
+    <tr><th>Ref</th><th>Title</th><th class="num">Inherent</th><th class="num">Appetite</th><th>Reviewed</th></tr>
+    {% for r in risks %}
+    <tr><td class="id">{{ r.ref }}</td><td>{{ r.title }}</td>
+        <td class="num">{{ r.inherent_score }}</td><td class="num">{{ r.appetite }}</td>
+        <td class="id dim">{{ r.last_reviewed_on }}</td></tr>
+    {% endfor %}
+  </table></div>
+
+  <h2>Recent incidents</h2>
+  <div class="wrap"><table>
+    <tr><th>Ref</th><th>Title</th><th class="num">Sev</th><th>Stated impact</th></tr>
+    {% for i in incidents %}
+    <tr><td class="id">{{ i.ref }}</td><td>{{ i.title }}</td><td class="num">{{ i.severity }}</td>
+        <td>{% if s.criticality == 'tier1' and i.stated_impact == 'no customer impact' and i.severity <= 2 %}
+              <span class="tag conflict">{{ i.stated_impact }}</span>
+            {% else %}<span class="dim">{{ i.stated_impact }}</span>{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+</div>
+{% endblock %}

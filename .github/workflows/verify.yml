@@ -1,0 +1,94 @@
+# Boots the whole environment and runs its own self-checks.
+#
+# This tests VirtualOrg, not any kit: it proves the conditions the ground truth
+# claims exist are genuinely observable through the vendor APIs. If it goes red,
+# the generator and the lenses have drifted apart.
+name: verify
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the checks' own dependencies
+        run: pip install --quiet httpx PyYAML
+
+      - name: Boot the world and the twins
+        run: |
+          cp .env.example .env
+          docker compose up -d --build
+          echo "waiting for the gateway and the control center"
+          for i in $(seq 1 60); do
+            curl -sf localhost:8080/healthz >/dev/null 2>&1 \
+              && curl -sf localhost:3000/healthz >/dev/null 2>&1 && break
+            sleep 3
+          done
+
+      - name: The world generated
+        run: docker compose logs world-engine | tail -30
+
+      - name: Self-checks
+        run: python3 scripts/verify.py
+
+      - name: Every Control Center surface renders
+        run: |
+          fail=0
+          for u in / /asset /spine /lenses /org /groundtruth /scenario \
+                   "/manual?ch=overview" "/manual?ch=model" "/manual?ch=reach" \
+                   "/manual?ch=gaps" "/manual?ch=connect" "/manual?ch=api" \
+                   "/manual?ch=correlate" "/manual?ch=scoring"; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "localhost:3000$u")
+            [ "$code" = "200" ] || { echo "FAIL $code $u"; fail=1; }
+          done
+          exit $fail
+
+      - name: The chaos profile serves the happy path
+        run: |
+          docker compose --profile chaos up -d wiremock
+          for i in $(seq 1 20); do
+            curl -sf localhost:8090/__admin/mappings >/dev/null 2>&1 && break; sleep 2
+          done
+          curl -sf localhost:8090/healthz >/dev/null
+
+      - name: Real OAuth actually validates
+        run: |
+          VO_AUTH_MODE=jwks docker compose up -d --force-recreate twin-gateway
+          for i in $(seq 1 40); do curl -sf localhost:8080/healthz >/dev/null 2>&1 && break; sleep 3; done
+          TOK=$(curl -s -X POST localhost:8081/realms/virtualorg/protocol/openid-connect/token \
+                -d grant_type=client_credentials -d client_id=vo-kit -d client_secret=vo-kit-secret \
+                | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+          real=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOK" \
+                 "localhost:8080/grc/api/v1/controls?limit=1")
+          static=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer vo-dev-token" \
+                   "localhost:8080/grc/api/v1/controls?limit=1")
+          echo "real token=$real  static token=$static"
+          [ "$real" = "200" ] && [ "$static" = "401" ]
+
+      - name: The world is deterministic
+        run: |
+          docker compose up -d --force-recreate twin-gateway
+          a=$(docker compose exec -T world-db psql -U vo -d world -tAc \
+              "SELECT md5(string_agg(id,',' ORDER BY id)) FROM world.expectation")
+          docker compose up -d --force-recreate world-engine
+          sleep 8
+          b=$(docker compose exec -T world-db psql -U vo -d world -tAc \
+              "SELECT md5(string_agg(id,',' ORDER BY id)) FROM world.expectation")
+          echo "before=$a after=$b"
+          [ "$a" = "$b" ]
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail 80

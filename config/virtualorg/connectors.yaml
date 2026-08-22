@@ -1,0 +1,149 @@
+# Point your kit at VirtualOrg. Same binary as production — only this file differs.
+# This is the file that proves the DESIGN.md §6 contract holds.
+#
+#   from your IDE / host   -> base_url http://localhost:8080/...
+#   from inside compose    -> base_url http://twin-gateway:8080/...
+
+connectors:
+  - id: snow-primary
+    type: servicenow
+    enabled: true
+    mode: simulated                      # flows through to the posture report
+    endpoint:
+      base_url: http://localhost:8080/servicenow
+      timeout_ms: 30000
+      tls: {verify: false}
+    auth:
+      type: bearer_static                # VO_AUTH_MODE=static
+      token: ${VO_TOKEN}
+    sync:
+      poll_interval: 15m
+      initial_lookback: 3650d
+      page_size: 200
+      pagination: offset                 # sysparm_limit / sysparm_offset
+      cursor_field: opened_at
+    schema_profile: out-of-the-box       # | lightly-customized | heavily-customized
+    scope:
+      tables: [incident, cmdb_ci_computer, cmdb_ci_appl, cmdb_ci_service,
+               cmdb_ci_business_process, cmdb_sam_sw_install, cmdb_rel_ci]
+
+  - id: splunk-primary
+    type: splunk
+    enabled: true
+    mode: simulated
+    endpoint:
+      base_url: http://localhost:8080/splunk
+      timeout_ms: 120000                 # async jobs are slow; don't reuse the REST timeout
+      tls: {verify: false}
+    auth:
+      type: bearer_static
+      token: ${VO_TOKEN}
+    sync:
+      poll_interval: 5m
+      initial_lookback: 90d              # matches the lens retention window
+      page_size: 5000
+      pagination: async_job              # POST job -> poll -> fetch results
+      job_poll_interval_ms: 500
+      job_timeout_ms: 60000
+    scope:
+      searches: ["search index=main"]
+
+  - id: grc-primary
+    type: onspring
+    enabled: true
+    mode: simulated
+    endpoint:
+      base_url: http://localhost:8080/grc/api/v1
+      timeout_ms: 30000
+      tls: {verify: false}
+    auth:
+      type: bearer_static
+      token: ${VO_TOKEN}
+    sync:
+      poll_interval: 60m
+      page_size: 200
+      pagination: cursor                 # opaque next_cursor
+    scope:
+      objects: [controls, assets, findings, risks, control-mappings,
+                frameworks, requirements, crosswalks,
+                policies, exceptions, treatments]
+      attachments:
+        enabled: true
+        max_bytes: 5000000             # the twin refuses anything larger with a 413
+        auth: download_token           # a second credential, from the metadata call
+
+  - id: iam-primary
+    type: okta
+    enabled: true
+    mode: simulated
+    endpoint:
+      base_url: http://localhost:8080/iam/api/v1
+      timeout_ms: 30000
+      tls: {verify: false}
+    auth:
+      type: bearer_static
+      token: ${VO_TOKEN}
+    sync:
+      poll_interval: 30m
+      page_size: 200
+      pagination: link_header          # follow Link: rel="next"; never build the URL
+    scope:
+      objects: [users, groups]
+
+  - id: scanner-primary
+    type: tenable
+    enabled: true
+    mode: simulated
+    endpoint:
+      base_url: http://localhost:8080/scanner/api/v3
+      timeout_ms: 60000
+      tls: {verify: false}
+    auth:
+      type: bearer_static
+      token: ${VO_TOKEN}
+    sync:
+      poll_interval: 6h
+      initial_lookback: 365d           # matches the lens retention window
+      page_size: 500
+      pagination: incremental          # since= / next_since checkpoint
+      cursor_field: last_found
+    scope:
+      objects: [findings, assets, misconfigurations]
+
+
+  - id: hr-primary
+    type: workday
+    enabled: true
+    mode: simulated
+    endpoint:
+      base_url: http://localhost:8080/hr/api/v1
+      timeout_ms: 30000
+      tls: {verify: false}
+    auth:
+      type: bearer_static
+      token: ${VO_TOKEN}
+    sync:
+      poll_interval: 24h
+      page_size: 200
+      pagination: page_number          # page / per_page, total_pages in the envelope
+    scope:
+      objects: [workers]
+
+  - id: edr-primary
+    type: crowdstrike
+    enabled: true
+    mode: simulated
+    endpoint:
+      base_url: http://localhost:8080/edr/devices
+      timeout_ms: 60000
+      tls: {verify: false}
+    auth:
+      type: bearer_static
+      token: ${VO_TOKEN}
+    sync:
+      poll_interval: 15m
+      page_size: 500
+      pagination: query_then_hydrate   # ids from /queries, detail from /entities
+      hydrate_batch: 100
+    scope:
+      objects: [devices]

@@ -1,0 +1,12 @@
+{
+  "priority": 1,
+  "scenarioName": "expired-token",
+  "requiredScenarioState": "refreshed",
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/grc/api/v1/risks"
+  },
+  "response": {
+    "proxyBaseUrl": "http://twin-gateway:8080"
+  }
+}

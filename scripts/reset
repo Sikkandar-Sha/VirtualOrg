@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Restore a baseline. Seconds, not minutes — this is what makes world-state W1
+# -> posture P1 golden-file testing usable. (DESIGN.md §7)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+NAME="${1:-baseline}"
+DSN="${VO_DSN:-postgresql://vo@127.0.0.1:5433/world}"
+[ -f "seeds/${NAME}.dump" ] || { echo "no such baseline: seeds/${NAME}.dump"; exit 1; }
+psql "$DSN" -q -c "DROP SCHEMA IF EXISTS world CASCADE"
+pg_restore -d "$DSN" --no-owner "seeds/${NAME}.dump"
+echo "==> restored ${NAME}"

@@ -1,0 +1,106 @@
+{% extends "base.html" %}{% block title %}{{ c.ref }}{% endblock %}
+{% block body %}
+<div class="crumb"><a href="/spine">Surface 2 · the spine</a></div>
+<h1>{{ c.ref }} — {{ c.title }}</h1>
+<p class="lede">Tested {{ c.test_frequency }} · {{ 'automated' if c.automated else 'manual' }} ·
+  owner {% if c.owner_id %}<a href="/org/person/{{ c.owner_id }}">{{ c.owner_name }}</a>{% else %}none of record{% endif %}
+  {%- if c.owner_ended_on %} <span class="tag conflict">left {{ c.owner_ended_on }}</span>{% endif %}</p>
+
+{% if expectations %}
+<div class="verdict" style="border-left-color:var(--flag)">
+  <div class="eyebrow">Ground truth on this control</div>
+  {% for e in expectations %}<p>{{ e.claim }}</p>{% endfor %}
+</div>
+{% endif %}
+
+<h2>Evidence — true attribution, with traps</h2>
+<p class="note">Nothing in the vendor APIs links any of this to the control. That attribution
+  is the kit's job; this column is the answer key.</p>
+{% if summary %}
+<div class="wrap"><table>
+  <tr><th>Kind</th><th>Genuine evidence</th><th class="num">Rows</th></tr>
+  {% for s in summary %}
+  <tr><td>{{ s.kind }}</td>
+      <td>{% if s.is_trap %}<span class="tag trap">trap — topically adjacent</span>{% else %}yes{% endif %}</td>
+      <td class="num">{{ s.n }}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<span class="void">no evidence source of any kind — this control is silent, not healthy</span>
+{% endif %}
+
+<div class="cols">
+<div>
+  <h2>Requirements it covers</h2>
+  <table>
+    <tr><th>Ref</th><th>Requirement</th><th class="num">Coverage</th></tr>
+    {% for r in reqs %}
+    <tr><td class="id">{{ r.ref }}</td><td class="dim">{{ r.title }}</td>
+        <td class="num">{{ (r.coverage * 100) | round | int }}%</td></tr>
+    {% endfor %}
+  </table>
+
+  <h2>Policies it implements</h2>
+  {% if policies %}
+  <table>
+    {% for x in policies %}<tr><td class="id">{{ x.ref }}</td><td>{{ x.title }}</td></tr>{% endfor %}
+  </table>
+  {% else %}<span class="void">implements no written policy</span>{% endif %}
+
+  {% if exceptions %}
+  <h2>Exceptions</h2>
+  <table>
+    <tr><th>ID</th><th>Reason</th><th>Expires</th><th>Status</th></tr>
+    {% for e in exceptions %}
+    <tr><td class="id">{{ e.id }}</td><td class="dim">{{ e.reason }}</td>
+        <td class="id dim">{{ e.expires_on }}</td>
+        <td>{% if e.status == 'active' and e.expires_on < now %}
+              <span class="tag conflict">active but expired</span>
+            {% else %}{{ e.status }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <h2>Test history</h2>
+  {% if tests %}
+  <table>
+    {% for t in tests %}
+    <tr><td class="id dim">{{ t.tested_on }}</td>
+        <td>{% if t.result != 'effective' %}<span class="tag conflict">{{ t.result }}</span>{% else %}{{ t.result }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<span class="void">never operationalised — no test has ever run</span>{% endif %}
+</div>
+<div>
+  <h2>Audit findings</h2>
+  {% if findings %}
+  <table>
+    <tr><th>ID</th><th>Severity</th><th>Due</th><th>Status</th></tr>
+    {% for f in findings %}
+    <tr><td class="id">{{ f.id }}</td><td>{{ f.severity }}</td><td class="id dim">{{ f.due_on }}</td>
+        <td>{% if f.status == 'overdue' %}<span class="tag conflict">overdue</span>{% else %}{{ f.status }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<span class="void">no findings raised</span>{% endif %}
+
+  <h2>Risks it mitigates</h2>
+  {% if risks %}
+  <table>
+    {% for r in risks %}
+    <tr><td class="id">{{ r.ref }}</td><td>{{ r.title }}</td><td class="num">{{ r.contribution }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<span class="void">mitigates nothing in the register</span>{% endif %}
+</div>
+</div>
+
+<h2>Evidence rows ({{ evidence|length }})</h2>
+<div class="wrap"><table>
+  <tr><th>ID</th><th>Kind</th><th>Source</th><th class="num">Strength</th><th>Observed</th><th>Genuine</th></tr>
+  {% for e in evidence[:60] %}
+  <tr><td class="id dim">{{ e.id }}</td><td>{{ e.kind }}</td><td class="id dim">{{ e.source_ref }}</td>
+      <td class="num">{{ e.strength }}</td><td class="id dim">{{ e.observed_at.strftime('%Y-%m-%d') }}</td>
+      <td>{% if e.is_trap %}<span class="tag trap">trap</span>{% else %}yes{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

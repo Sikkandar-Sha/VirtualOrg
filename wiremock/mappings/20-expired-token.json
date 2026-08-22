@@ -1,0 +1,26 @@
+{
+  "priority": 1,
+  "scenarioName": "expired-token",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "refreshed",
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/grc/api/v1/risks",
+    "headers": {
+      "Authorization": {
+        "contains": "Bearer"
+      }
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "WWW-Authenticate": "Bearer error=\"invalid_token\", error_description=\"The access token expired\"",
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "error": "invalid_token",
+      "error_description": "The access token expired"
+    }
+  }
+}

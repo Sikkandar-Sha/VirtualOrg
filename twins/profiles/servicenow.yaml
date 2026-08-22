@@ -1,0 +1,77 @@
+# Vendor pack x customer profile (§5). Same twin, three shapes.
+out-of-the-box:
+  incident:
+    fields: {ref: number, title: short_description, category: category,
+             severity: severity, opened: opened_at, closed: closed_at,
+             service: business_service, impact: u_impact_statement}
+    severity_values: {1: "1", 2: "2", 3: "3", 4: "4"}
+  cmdb_ci_computer:
+    fields: {ref: name, fqdn: fqdn, ip: ip_address, os: os, os_version: os_version,
+             owner: assigned_to, criticality: u_criticality, updated: sys_updated_on}
+
+  cmdb_ci_appl:
+    fields: {ref: name, criticality: u_criticality, owner: assigned_to,
+             updated: sys_updated_on}
+  cmdb_ci_service:
+    fields: {ref: name, tier: service_classification, owner: assigned_to,
+             updated: sys_updated_on}
+  cmdb_rel_ci:
+    fields: {parent: parent, child: child, type: type}
+
+  cmdb_ci_business_process:
+    fields: {ref: name, criticality: u_criticality, rto: u_rto_hours,
+             owner: assigned_to, updated: sys_updated_on}
+  cmdb_sam_sw_install:
+    fields: {ref: installed_on_ci, name: display_name, publisher: publisher,
+             version: version, installed: install_date}
+
+lightly-customized:
+  incident:
+    fields: {ref: number, title: short_description, category: u_incident_category,
+             severity: severity, opened: opened_at, closed: resolved_at,
+             service: business_service, impact: u_customer_impact}
+    severity_values: {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
+  cmdb_ci_computer:
+    fields: {ref: name, fqdn: fqdn, ip: ip_address, os: os, os_version: u_os_build,
+             owner: u_primary_user, criticality: u_criticality, updated: sys_updated_on}
+
+  cmdb_ci_appl:
+    fields: {ref: name, criticality: u_criticality, owner: u_application_owner,
+             updated: sys_updated_on}
+  cmdb_ci_service:
+    fields: {ref: name, tier: u_service_tier, owner: u_service_owner,
+             updated: sys_updated_on}
+  cmdb_rel_ci:
+    fields: {parent: parent, child: child, type: u_rel_type}
+
+  cmdb_ci_business_process:
+    fields: {ref: name, criticality: u_process_criticality, rto: u_rto_hours,
+             owner: u_process_owner, updated: sys_updated_on}
+  cmdb_sam_sw_install:
+    fields: {ref: installed_on_ci, name: display_name, publisher: u_vendor,
+             version: version, installed: install_date}
+
+heavily-customized:
+  incident:
+    fields: {ref: u_case_ref, title: u_summary, category: u_taxonomy_l2,
+             severity: u_business_severity, opened: u_raised_utc, closed: u_closed_utc,
+             service: u_service_ci, impact: u_impact_narrative}
+    severity_values: {1: "Sev-Critical", 2: "Sev-Major", 3: "Sev-Minor", 4: "Sev-Info"}
+  cmdb_ci_computer:
+    fields: {ref: u_device_name, fqdn: u_dns_name, ip: u_ipv4, os: u_platform,
+             os_version: u_platform_build, owner: u_custodian,
+             criticality: u_bia_rating, updated: u_last_discovered}
+  cmdb_ci_appl:
+    fields: {ref: u_app_name, criticality: u_bia_rating, owner: u_custodian,
+             updated: u_last_discovered}
+  cmdb_ci_service:
+    fields: {ref: u_service_name, tier: u_service_criticality, owner: u_custodian,
+             updated: u_last_discovered}
+  cmdb_rel_ci:
+    fields: {parent: u_parent_ci, child: u_child_ci, type: u_relationship}
+  cmdb_ci_business_process:
+    fields: {ref: u_process_name, criticality: u_bia_rating, rto: u_recovery_hours,
+             owner: u_custodian, updated: u_last_discovered}
+  cmdb_sam_sw_install:
+    fields: {ref: u_host_ci, name: u_package, publisher: u_vendor,
+             version: u_package_version, installed: u_first_seen}

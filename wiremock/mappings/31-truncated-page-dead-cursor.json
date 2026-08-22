@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/grc/api/v1/controls",
+    "queryParameters": { "cursor": { "equalTo": "dHJ1bmNhdGVk" } }
+  },
+  "response": {
+    "status": 500,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": "internal", "message": "cursor expired" }
+  }
+}

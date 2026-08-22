@@ -1,0 +1,17 @@
+{
+  "priority": 1,
+  "scenarioName": "grc-truncated-page",
+  "requiredScenarioState": "settled",
+  "request": {
+    "method": "GET",
+    "urlPath": "/grc/api/v1/controls",
+    "queryParameters": {
+      "cursor": {
+        "absent": true
+      }
+    }
+  },
+  "response": {
+    "proxyBaseUrl": "http://twin-gateway:8080"
+  }
+}

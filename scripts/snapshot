@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Freeze the current world as a named baseline. Generating 3 years of history is
+# the slowest thing in the loop; do it once, restore it thereafter. (DESIGN.md §2)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+NAME="${1:-baseline}"
+DSN="${VO_DSN:-postgresql://vo@127.0.0.1:5433/world}"
+mkdir -p seeds
+pg_dump -Fc -n world "$DSN" > "seeds/${NAME}.dump"
+echo "==> seeds/${NAME}.dump ($(du -h "seeds/${NAME}.dump" | cut -f1))"

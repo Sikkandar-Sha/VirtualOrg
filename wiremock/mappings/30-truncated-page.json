@@ -1,0 +1,45 @@
+{
+  "priority": 1,
+  "scenarioName": "grc-truncated-page",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "settled",
+  "request": {
+    "method": "GET",
+    "urlPath": "/grc/api/v1/controls",
+    "queryParameters": {
+      "cursor": {
+        "absent": true
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "items": [
+        {
+          "reference": "C-001",
+          "title": "Access Control \u2014 control 1",
+          "test_frequency": "monthly",
+          "automated": true,
+          "owner": "Ravi Sharma",
+          "last_tested_on": "2026-07-30",
+          "effectiveness": "effective"
+        },
+        {
+          "reference": "C-002",
+          "title": "Privileged Access \u2014 control 2",
+          "test_frequency": "quarterly",
+          "automated": false,
+          "owner": "Nina Petrov",
+          "last_tested_on": "2026-06-11",
+          "effectiveness": "partial"
+        }
+      ],
+      "next_cursor": "dHJ1bmNhdGVk",
+      "total": 100
+    }
+  }
+}

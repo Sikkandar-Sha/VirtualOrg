@@ -1,0 +1,12 @@
+{
+  "priority": 1,
+  "scenarioName": "splunk-rate-limit",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "backed-off",
+  "request": { "method": "GET", "urlPathPattern": "/splunk/services/search/jobs/[^/]+" },
+  "response": {
+    "status": 429,
+    "headers": { "Retry-After": "3", "Content-Type": "application/json" },
+    "jsonBody": { "messages": [ { "type": "ERROR", "text": "search quota exceeded" } ] }
+  }
+}

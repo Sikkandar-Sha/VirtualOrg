@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% block title %}Ground truth{% endblock %}
+{% block body %}
+<div class="eyebrow">Surface 5 · ground truth</div>
+<h1>The assertion catalogue</h1>
+<p class="lede">Every row is something the kit should conclude, or should refuse to conclude.
+  The “actual” column stays empty until a kit is pointed at this world and its output is
+  loaded — the Control Center computes nothing itself.</p>
+
+<div class="wrap"><table style="margin-top:20px">
+  <tr><th>Family</th><th>Claim</th><th class="num">Rows</th></tr>
+  {% for f in families %}
+  <tr><td><a href="/groundtruth?family={{ f.family }}">{{ f.family }}</a></td>
+      <td>{{ f.claim }}</td><td class="num">{{ "{:,}".format(f.n) }}</td></tr>
+  {% endfor %}
+</table></div>
+
+<p class="note" style="margin-top:14px">Attribution scoring corpus:
+  <b>{{ "{:,}".format(corpus.true_links) }}</b> true evidence links, <b>{{ "{:,}".format(corpus.traps) }}</b> deliberate
+  traps, across {{ corpus.controls_with_evidence }} controls.</p>
+
+<div class="tabs">
+  <a href="/groundtruth" {% if not family %}aria-current="page"{% endif %}>all</a>
+  {% for f in families | map(attribute='family') | unique %}
+  <a href="/groundtruth?family={{ f }}" {% if family == f %}aria-current="page"{% endif %}>{{ f }}</a>
+  {% endfor %}
+</div>
+
+<p class="note">{{ "{:,}".format(total) }} expectations{% if family %} in {{ family }}{% endif %}.</p>
+<div class="wrap"><table>
+  <tr><th>ID</th><th>Family</th><th>Subject</th><th>Claim</th><th>Detail</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td class="id dim">{{ r.id }}</td>
+    <td>{{ r.family }}</td>
+    <td>{% if r.subject_kind == 'asset' %}<a href="/asset/{{ r.subject_id }}">{{ r.subject_id }}</a>
+        {% elif r.subject_kind == 'control' %}<a href="/spine/control/{{ r.subject_id }}">{{ r.subject_id }}</a>
+        {% elif r.subject_kind == 'person' %}<a href="/org/person/{{ r.subject_id }}">{{ r.subject_id }}</a>
+        {% else %}{{ r.subject_id }}{% endif %}
+      <span class="dim">{{ r.subject_kind }}</span></td>
+    <td>{{ r.claim }}</td>
+    <td class="dim">{% for k, v in r.detail.items() %}<span class="kv"><b>{{ k }}</b> {{ v }}</span>{% endfor %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+<div class="pager">
+  {% if offset %}<a href="/groundtruth?family={{ family }}&offset={{ offset - 200 }}">← previous</a>{% endif %}
+  {% if offset + 200 < total %}<a href="/groundtruth?family={{ family }}&offset={{ offset + 200 }}">next →</a>{% endif %}
+</div>
+{% endblock %}

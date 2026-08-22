@@ -1,0 +1,5 @@
+{
+  "priority": 10,
+  "request": { "method": "ANY", "urlPattern": ".*" },
+  "response": { "proxyBaseUrl": "http://twin-gateway:8080" }
+}

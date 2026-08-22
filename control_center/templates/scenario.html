@@ -1,0 +1,50 @@
+{% extends "base.html" %}{% block title %}Scenario{% endblock %}
+{% block body %}
+<div class="eyebrow">Surface 6 · scenario</div>
+<h1>Baselines and chaos state</h1>
+<p class="lede">Read-only, deliberately. §8's rule is that the Control Center holds zero
+  business logic and never mutates the world it describes — so this surface shows the state
+  and the exact command, and you run it. Buttons here would make the harness capable of
+  changing the thing it is supposed to be the record of.</p>
+
+<h2>Snapshots available</h2>
+{% if seeds %}
+<div class="wrap"><table>
+  <tr><th>Baseline</th><th class="num">Size</th><th class="unit"></th><th>Frozen</th><th>Restore with</th></tr>
+  {% for s in seeds %}
+  <tr><td class="id"><b>{{ s.name }}</b></td><td class="num">{{ s.size_mb }}</td><td class="unit">MB</td>
+      <td class="dim">{{ s.modified.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td><code>./scripts/reset {{ s.name }}</code></td></tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<span class="void">no baseline frozen yet</span>
+<p class="note" style="margin-top:10px">Generating three years of history is the slowest thing
+  in the loop. Freeze it once with <code>./scripts/seed baseline</code>, then
+  <code>./scripts/reset baseline</code> thereafter.</p>
+{% endif %}
+
+<h2>Commands</h2>
+<div class="wrap"><table>
+  <tr><th>Intent</th><th>Command</th></tr>
+  <tr><td>Freeze the current world</td><td><code>./scripts/snapshot my-case</code></td></tr>
+  <tr><td>Restore a baseline</td><td><code>./scripts/reset baseline</code></td></tr>
+  <tr><td>Regenerate from scratch</td><td><code>./scripts/seed baseline</code></td></tr>
+  <tr><td>Move the world's clock</td><td><code>python3 world/generate.py --seed {{ meta.seed }} --as-of YYYY-MM-DD</code></td></tr>
+  <tr><td>Shrink for a laptop</td><td><code>python3 world/generate.py --seed {{ meta.seed }} --scale 0.2</code></td></tr>
+  <tr><td>Verify the environment</td><td><code>python3 scripts/verify.py</code></td></tr>
+  <tr><td>Bring up the adversarial layer</td><td><code>docker compose --profile chaos up -d</code></td></tr>
+  <tr><td>Re-arm every chaos scenario</td><td><code>curl -X POST localhost:8090/__admin/scenarios/reset</code></td></tr>
+</table></div>
+
+<h2>Dependencies right now</h2>
+<div class="status">
+  {% for p in probes %}
+  <div><div class="k">{{ p.name }}</div>
+    <div class="v"><span class="dot {% if p.state == 'up' %}{% elif p.state == 'off' %}idle{% else %}down{% endif %}"></span>
+      {{ p.state }}<small>{{ p.detail }}</small></div></div>
+  {% endfor %}
+</div>
+<p class="note" style="margin-top:12px">WireMock shows <b>off</b> unless you started the chaos
+  profile. That is the degradation family's only source — with it down, family 3 is not live.</p>
+{% endblock %}
