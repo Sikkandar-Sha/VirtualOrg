@@ -430,6 +430,24 @@ random stream and changes every downstream count. Golden files recorded before t
 need re-baselining. Determinism is unaffected: the same seed and `--as-of` still produce
 the same world.
 
+## Branches
+
+Two, and only two.
+
+| Branch | Purpose |
+|---|---|
+| `dev` | Where work happens. Everything lands here first. |
+| `main` | Finalised, released state. Only ever fast-forwarded from `dev`. |
+
+```bash
+git checkout dev && git push                 # day to day
+git checkout main && git merge --ff-only dev && git push   # when it is ready
+```
+
+CI runs on both: it boots the whole environment, runs the 80 self-checks, loads every
+Control Center surface, exercises the chaos proxy and real OAuth, and regenerates the
+world twice to prove determinism.
+
 ## Licence
 
 Apache 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Vendor names are trademarks of
