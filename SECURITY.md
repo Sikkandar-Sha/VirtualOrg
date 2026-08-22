@@ -23,6 +23,24 @@ because modelling one would not have tested anything about the kit under test.
 
 If you want to change them, everything is in `.env`. That file is gitignored.
 
+## What is not a shared default
+
+Two things are deliberately keyed independently of the token above, so that changing
+nothing still leaves them unguessable:
+
+- **Attachment download tokens** are an HMAC over the attachment id, keyed by
+  `VO_EVIDENCE_SECRET`. Leave that unset and the process generates a random key at
+  startup, so tokens are valid only for that run. The attachment metadata call issues a
+  current one on every request, so nothing needs to persist them.
+- **The OAuth audience** is the client id (`vo-kit`), not `account`. Keycloak stamps
+  `account` into every token it issues for a realm, so checking it would prove the realm
+  and nothing more. The realm ships an audience mapper so tokens name the client.
+
+Every endpoint except `/healthz` requires a credential, including the `/_lens/{id}` and
+`/_provenance` metadata routes. `/healthz` stays open because probes and CI need to know
+the service is up before they have anything to authenticate with, and it returns only
+liveness and the world seed.
+
 ## What VirtualOrg is not
 
 It is not a security product, not a scanner, and not a source of security advice. The

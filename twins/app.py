@@ -7,7 +7,9 @@ Adversarial behaviour belongs in WireMock, in front of this. (DESIGN.md §2)
 """
 import base64
 import hashlib
+import hmac
 import os
+import secrets
 import uuid
 import datetime as dt
 from typing import Optional
@@ -38,7 +40,10 @@ AUTH_MODE = os.environ.get("VO_AUTH_MODE", "static")
 STATIC_TOKENS = set(filter(None, os.environ.get("VO_TOKENS", "vo-dev-token").split(",")))
 JWKS_URL = os.environ.get("VO_JWKS_URL", "")
 JWT_ISSUER = os.environ.get("VO_JWT_ISSUER", "")
-JWT_AUDIENCE = os.environ.get("VO_JWT_AUDIENCE", "account")
+# "account" is stamped into every token Keycloak issues for a realm, so checking
+# it proves the realm and nothing else. Default to the client id instead, which
+# the realm now mints a dedicated audience claim for.
+JWT_AUDIENCE = os.environ.get("VO_JWT_AUDIENCE", "vo-kit")
 
 app = FastAPI(title="VirtualOrg twin-gateway", docs_url="/docs")
 
@@ -127,8 +132,9 @@ def healthz():
 
 
 @app.get("/_lens/{lens_id}")
-def lens_info(lens_id: str):
+def lens_info(lens_id: str, authorization: Optional[str] = Header(None)):
     """Not a vendor endpoint. Feeds Control Center surface 3."""
+    require_token(authorization)
     try:
         return {"lens": lens_id, **lenses.coverage_note(lens_id),
                 "world_now": lenses.world_now().isoformat(),
@@ -138,9 +144,10 @@ def lens_info(lens_id: str):
 
 
 @app.get("/_provenance")
-def provenance_all():
+def provenance_all(authorization: Optional[str] = Header(None)):
     """Not a vendor endpoint. Where each response shape came from, and whether that
     is evidence. DESIGN.md §5: twins built from imagination are marked unverified."""
+    require_token(authorization)
     out = {}
     for lens_id, e in PROVENANCE.items():
         out[lens_id] = {**e, "status": provenance_status(e)}
@@ -153,7 +160,8 @@ def provenance_all():
 
 
 @app.get("/_provenance/{lens_id}")
-def provenance_one(lens_id: str):
+def provenance_one(lens_id: str, authorization: Optional[str] = Header(None)):
+    require_token(authorization)
     e = PROVENANCE.get(lens_id)
     if not e:
         raise HTTPException(404, "no such lens")
@@ -933,14 +941,22 @@ def grc_crosswalks(cursor: Optional[str] = None, limit: int = Query(200, le=1000
 
 # --- binary evidence retrieval (DESIGN.md §5) -------------------------------
 MAX_DOWNLOAD_BYTES = 5_000_000
-_SECRET = (sorted(STATIC_TOKENS)[0] if STATIC_TOKENS else "vo") + ":evidence"
+
+# Keyed independently of the bearer token. Deriving it from VO_TOKENS made the
+# download token predictable whenever that token was the shipped default, which
+# is every install that has not changed it and every install running in jwks mode
+# where VO_TOKENS is not used for anything else. Unset means a fresh random key
+# per process: tokens then only work for the lifetime of the run, which is right,
+# because the metadata call hands out a current one on every request.
+EVIDENCE_SECRET = os.environ.get("VO_EVIDENCE_SECRET") or secrets.token_urlsafe(32)
 
 
 def _download_token(attachment_id: str) -> str:
     """A second credential for the bytes, handed out with the metadata. Real GRC
     platforms gate attachment content separately from the record API; a connector
     that reuses its bearer token here gets a 403."""
-    return hashlib.sha256(f"{attachment_id}:{_SECRET}".encode()).hexdigest()[:32]
+    return hmac.new(EVIDENCE_SECRET.encode(), attachment_id.encode(),
+                    hashlib.sha256).hexdigest()[:32]
 
 
 @app.get(GRC + "/findings/{finding_id}/attachments")
@@ -970,7 +986,7 @@ def grc_attachment_content(attachment_id: str, token: Optional[str] = None,
                     FROM attachment WHERE id = %s""", (attachment_id,))
     if not a:
         raise HTTPException(404, "no such attachment")
-    if token != _download_token(attachment_id):
+    if not hmac.compare_digest(token or "", _download_token(attachment_id)):
         raise HTTPException(403, "content requires the download_token from the "
                                  "attachment metadata")
     if a["size_bytes"] > MAX_DOWNLOAD_BYTES:

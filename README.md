@@ -364,7 +364,9 @@ It is for fuzzing, not scoring: the mangled rows are not written as expectations
 
 Static bearer tokens by default. `VO_AUTH_MODE=jwks` validates real RS256 tokens
 against Keycloak's published keys, checking signature, issuer, audience and expiry.
-Nothing is stubbed.
+Nothing is stubbed. The audience is the client id rather than `account`, which Keycloak
+puts in every token it issues for a realm, so the check identifies the caller rather
+than just the realm.
 
 ```bash
 VO_AUTH_MODE=jwks docker compose up -d --force-recreate twin-gateway

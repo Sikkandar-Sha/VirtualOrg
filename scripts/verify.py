@@ -448,6 +448,28 @@ check("no lens claims verification without a capture date",
           for v in prov["lenses"].values()),
       "status is derived, not asserted")
 
+# ---- 4d-ii. the hardening, asserted rather than assumed
+print("\nAccess control")
+for path in ("/_lens/splunk", "/_provenance", "/_provenance/scanner"):
+    r = httpx.get(BASE + path, timeout=20)
+    check(f"{path} requires a credential", r.status_code == 401, f"HTTP {r.status_code}")
+check("/healthz stays open so probes can run before credentials",
+      httpx.get(BASE + "/healthz", timeout=20).status_code == 200, "by design")
+
+# the download token must not be derivable from the bearer token
+import hashlib as _h
+_f = next((f for f in pages("/grc/api/v1/findings")
+           if c.get(f"/grc/api/v1/findings/{f['id']}/attachments").json()["attachments"]), None)
+if _f:
+    _a = c.get(f"/grc/api/v1/findings/{_f['id']}/attachments").json()["attachments"][0]
+    _guess = _h.sha256(f"{_a['id']}:{os.environ.get('VO_TOKEN', 'vo-dev-token')}:evidence"
+                       .encode()).hexdigest()[:32]
+    check("the attachment download token is not derived from the bearer token",
+          _a["download_token"] != _guess, "keyed independently, per VO_EVIDENCE_SECRET")
+    _r = c.get(f"/grc/api/v1/attachments/{_a['id']}/content", params={"token": _guess})
+    check("a token guessed from the bearer token is refused",
+          _r.status_code == 403, f"HTTP {_r.status_code}")
+
 # ---- 4e. auth, whichever mode is actually running
 print("\nAuth")
 mode = h.get("auth_mode", "static")

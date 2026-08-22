@@ -14,7 +14,23 @@
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "secret": "vo-kit-secret",
-      "attributes": { "access.token.lifespan": "300" }
+      "attributes": {
+        "access.token.lifespan": "300"
+      },
+      "protocolMappers": [
+        {
+          "name": "vo-kit-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "vo-kit",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     }
   ]
 }
