@@ -67,9 +67,21 @@ jobs:
         run: |
           VO_AUTH_MODE=jwks docker compose up -d --force-recreate twin-gateway
           for i in $(seq 1 40); do curl -sf localhost:8080/healthz >/dev/null 2>&1 && break; sleep 3; done
-          TOK=$(curl -s -X POST localhost:8081/realms/virtualorg/protocol/openid-connect/token \
-                -d grant_type=client_credentials -d client_id=vo-kit -d client_secret=vo-kit-secret \
-                | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+
+          # Keycloak imports the realm on first boot and takes its time. Waiting on
+          # the gateway alone is a race, and a flaky check is worse than no check.
+          echo "waiting for the virtualorg realm"
+          for i in $(seq 1 60); do
+            curl -sf localhost:8081/realms/virtualorg >/dev/null 2>&1 && break
+            sleep 3
+          done
+          curl -sf localhost:8081/realms/virtualorg >/dev/null \
+            || { echo "Keycloak never published the realm"; docker compose logs keycloak | tail -40; exit 1; }
+
+          RESP=$(curl -s -X POST localhost:8081/realms/virtualorg/protocol/openid-connect/token \
+                 -d grant_type=client_credentials -d client_id=vo-kit -d client_secret=vo-kit-secret)
+          TOK=$(printf '%s' "$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null || true)
+          [ -n "$TOK" ] || { echo "no token; Keycloak said: $RESP"; exit 1; }
           real=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOK" \
                  "localhost:8080/grc/api/v1/controls?limit=1")
           static=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer vo-dev-token" \
