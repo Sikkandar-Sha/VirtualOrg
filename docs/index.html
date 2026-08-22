@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VirtualOrg — a synthetic enterprise for testing risk-posture products</title>
-<meta name="description" content="Model an enterprise once, truthfully. Make every vendor tool a lossy lens over it. Ship with 1,217 ground-truth assertions saying what your product should conclude — and what it should refuse to conclude.">
+<title>VirtualOrg: a synthetic enterprise for testing risk-posture products</title>
+<meta name="description" content="Model an enterprise once, truthfully. Make every vendor tool a lossy lens over it. Ship with 1,217 ground-truth assertions saying what your product should conclude, and what it should refuse to conclude.">
 <meta property="og:title" content="VirtualOrg">
-<meta property="og:description" content="A synthetic enterprise for testing risk-posture products — with the answer key included.">
+<meta property="og:description" content="A synthetic enterprise for testing risk-posture products, with the answer key included.">
 <meta property="og:type" content="website">
 <style>
 :root{
@@ -121,7 +121,7 @@ footer a{color:var(--ink-2)}
   <div class="wrap">
     <div class="tag">Open source · Apache 2.0</div>
     <h1>VirtualOrg</h1>
-    <p class="sub">A synthetic enterprise for testing risk-posture products — with the
+    <p class="sub">A synthetic enterprise for testing risk-posture products, with the
       answer key included.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/Sikkandar-Sha/VirtualOrg">View on GitHub</a>
@@ -142,7 +142,7 @@ footer a{color:var(--ink-2)}
     <div class="scroll"><table>
       <tr><th>Option</th><th>Why it fails</th></tr>
       <tr><td>A real customer</td><td>You cannot. And even if you could, nobody knows what
-        the right answer was — so you cannot tell a good posture from a plausible one.</td></tr>
+        the right answer was, so you cannot tell a good posture from a plausible one.</td></tr>
       <tr><td>A demo dataset</td><td>Clean, consistent, complete. It never exercises
         correlation, conflict or coverage gaps, which are the only hard parts.</td></tr>
       <tr><td>Real products in a lab</td><td>Months of work, no ARM64 images for several,
@@ -157,7 +157,7 @@ footer a{color:var(--ink-2)}
     <h2>Model the enterprise once. Make every tool a lossy lens over it.</h2>
     <p class="lead">Your product calls an endpoint and receives JSON. It cannot tell
       whether that JSON came from a real product or a database query. So the world is
-      modelled once — completely and truthfully — and every vendor API is a deliberately
+      modelled once, completely and truthfully, and every vendor API is a deliberately
       imperfect view of it.</p>
 
     <figure>
@@ -221,7 +221,7 @@ footer a{color:var(--ink-2)}
         <text x="822" y="227" class="t" text-anchor="middle" fill="var(--accent)">kit</text>
       </svg>
       <figcaption>Five different names for the same machine, two more for the same person,
-        and no lens that sees all of it. All loss is applied at read time — the world
+        and no lens that sees all of it. All loss is applied at read time. The world
         itself is never wrong.</figcaption>
     </figure>
 
@@ -246,10 +246,10 @@ footer a{color:var(--ink-2)}
       conclude. Four families:</p>
     <div class="fam">
       <div><h3>Attribution</h3><p>Is this event genuine evidence for this control? Nothing
-        in any vendor API links a detection to a control — that inference is your product's
+        in any vendor API links a detection to a control. That inference is your product's
         core job.</p><span class="n">5,023 links · 773 traps</span></div>
       <div><h3>Conflict</h3><p>Sources disagree. Resolve it with a defensible rule or
-        surface it — either is valid. Silently picking a winner is not.</p>
+        surface it. Either is valid; silently picking a winner is not.</p>
         <span class="n">129 planted</span></div>
       <div><h3>Degradation</h3><p>A source is stale or down. Does posture announce the gap,
         or serve last week's numbers as current?</p><span class="n">12 + a chaos proxy</span></div>
@@ -266,9 +266,9 @@ footer a{color:var(--ink-2)}
     <h2>Five things it is actually for</h2>
     <div class="scroll"><table>
       <tr><th>If you are…</th><th>VirtualOrg gives you</th></tr>
-      <tr><td>Writing connectors</td><td>Seven live API patterns — async job, cursor,
-        offset, Link header, page number, incremental <code>since</code>,
-        query-then-hydrate — plus binary evidence behind a second credential</td></tr>
+      <tr><td>Writing connectors</td><td>Seven live API patterns: async job, cursor,
+        offset, Link header, page number, incremental <code>since</code> and
+        query-then-hydrate, plus binary evidence behind a second credential</td></tr>
       <tr><td>Testing entity resolution</td><td>One machine under five identifiers,
         recycled IPs so the IP is not a key, and exactly one join that <em>does</em> work
         so you can tell the difference</td></tr>
@@ -278,8 +278,8 @@ footer a{color:var(--ink-2)}
         Passing all three means the connector ships; passing only
         <code>out-of-the-box</code> means it demos</td></tr>
       <tr><td>Demoing</td><td>“Here are the 52 machines with no endpoint agent, and the
-        7 control exceptions that expired months ago — a GRC platform will never tell
-        you that”</td></tr>
+        7 control exceptions that expired months ago. A GRC platform will never tell
+        you that.”</td></tr>
     </table></div>
   </div>
 </section>
@@ -294,7 +294,7 @@ docker compose up -d          # world, seven twins, Keycloak, Control Center
 ./scripts/status              # is everything running?
 open http://localhost:3000    # the Control Center</code></pre>
     <p style="margin-top:22px">Point your product at
-      <code>config/virtualorg/connectors.yaml</code> — the whole environment switch is a
+      <code>config/virtualorg/connectors.yaml</code>. The whole environment switch is a
       config file, never a patched build. Then run
       <code>python3 scripts/verify.py</code>: 80 self-checks that prove the conditions
       the ground truth claims exist are genuinely observable through the vendor APIs.</p>
@@ -307,12 +307,12 @@ open http://localhost:3000    # the Control Center</code></pre>
     <h2>What this does not give you</h2>
     <p>With no vendor product in the loop, every claim of correctness rests on twin
       fidelity. Nothing here can tell you that a connector has misread a vendor's
-      pagination — the connector and the twin would be wrong together, in green CI,
+      pagination. The connector and the twin would be wrong together, in green CI,
       indefinitely.</p>
     <p>So every twin ships a <strong>provenance manifest</strong> recording where each
       response shape came from. All seven are marked <code>unverified</code>, because
       they were written from published behaviour rather than captured from a real tenant.
-      <strong>Passing tests here show your product agrees with this environment — not
+      <strong>Passing tests here show your product agrees with this environment, not
       that either agrees with the vendor.</strong> That gap is paid down by certification
       against real vendor tenants, not by hope.</p>
   </div>
