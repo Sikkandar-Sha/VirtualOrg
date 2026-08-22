@@ -16,10 +16,27 @@ None of these guard anything real. The database holds a generated fiction: inven
 people, invented machines, invented findings. There is no customer data anywhere in
 this project, and there never should be.
 
-**Do not expose a VirtualOrg instance to a network you do not control.** It binds to
-localhost by default. Anyone who can reach the ports can read the whole world and, with
-the token above, every twin. It has no authorisation model beyond a shared token,
-because modelling one would not have tested anything about the kit under test.
+**Do not expose a VirtualOrg instance to a network you do not control.**
+
+Every published port binds `127.0.0.1` explicitly. That matters more than it looks:
+Docker's short port form (`"5433:5432"`) binds `0.0.0.0`, and `POSTGRES_USER: vo` is the
+Postgres image's *bootstrap superuser*, so anyone who could reach `:5433` could run
+`COPY ... TO PROGRAM` and execute commands in the container. Under `--profile chaos`,
+WireMock's `/__admin` API is unauthenticated by design, so reaching `:8090` would let
+anyone install a stub proxying to an arbitrary host.
+
+Both are contained by the loopback binding. If you deliberately want LAN access, set
+`VO_BIND=0.0.0.0`, and understand that you are handing a superuser shell and an open
+proxy to everyone on that network.
+
+The bind mounts are read-only. Nothing inside a container writes to `./seeds` or
+`./wiremock`; the snapshot and restore scripts run `pg_dump` and `pg_restore` on the
+host. Read-only stops a compromised container, or an unauthenticated WireMock admin
+call, from writing into your checked-out repository.
+
+Anyone who can reach the ports can read the whole world and, with the token above, every
+twin. There is no authorisation model beyond a shared token, because modelling one would
+not have tested anything about the kit under test.
 
 If you want to change them, everything is in `.env`. That file is gitignored.
 

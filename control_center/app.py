@@ -48,6 +48,15 @@ def world_now():
     return dt.datetime.combine(d, dt.time(9, 0), tzinfo=dt.timezone.utc), meta
 
 
+def _shown_token():
+    """The Control Center is unauthenticated by design, so it must not print a
+    credential someone chose. The shipped default is public and worth showing;
+    anything else is redacted, because publishing it would be the page's own doing
+    rather than the operator's."""
+    t = os.environ.get("VO_TOKEN", "vo-dev-token")
+    return t if t == "vo-dev-token" else "<redacted: the value of VO_TOKEN>"
+
+
 def asset_version():
     """mtime of the stylesheet, so the browser never serves a stale one."""
     try:
@@ -382,7 +391,7 @@ def manual(request: Request, ch: str = "overview"):
                                          method=method, profile=profile, cap=2200)})
         ctx.update(lenses=lenses, examples=examples,
                    fieldmaps=M.profile_fieldmaps(), config_yaml=M.config_file(),
-                   token=os.environ.get("VO_TOKEN", "vo-dev-token"))
+                   token=_shown_token())
     elif ch == "api":
         ctx["endpoints"] = M.endpoints()
         ctx["prov"] = probes.provenance()

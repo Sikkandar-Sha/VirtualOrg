@@ -450,6 +450,17 @@ CI runs on both: it boots the whole environment, runs the 80 self-checks, loads 
 Control Center surface, exercises the chaos proxy and real OAuth, and regenerates the
 world twice to prove determinism.
 
+## Network boundary
+
+Every published port binds `127.0.0.1`. Docker's short port form binds `0.0.0.0`, and
+`POSTGRES_USER` is the Postgres image's bootstrap superuser, so a port on the LAN would
+hand anyone on that network `COPY ... TO PROGRAM`. Under `--profile chaos`, WireMock's
+`/__admin` API is unauthenticated by design and would be an open proxy. Both are
+contained by the binding, and `scripts/verify.py` asserts it by asking
+`docker compose config` what the daemon will actually do.
+
+Set `VO_BIND=0.0.0.0` if you deliberately want LAN access, knowing what you are sharing.
+
 ## Licence
 
 Apache 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Vendor names are trademarks of

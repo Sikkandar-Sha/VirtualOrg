@@ -7,6 +7,12 @@
 # The kit is deliberately NOT a default service: developers need a debugger
 # attached to it, and a rebuild-per-edit cycle is the wrong trade. (DESIGN.md §2)
 
+# Every port binds 127.0.0.1. This harness ships working credentials on purpose
+# (see SECURITY.md), and the Postgres role is the image's bootstrap superuser, so
+# anything that can reach :5433 can run COPY ... TO PROGRAM. Docker's short port
+# form defaults to 0.0.0.0, which would put all of that on the local network.
+# Override deliberately with VO_BIND=0.0.0.0 if you truly want that.
+
 name: virtualorg
 
 services:
@@ -18,8 +24,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-world}
     volumes:
       - world-data:/var/lib/postgresql/data
-      - ./seeds:/seeds
-    ports: ["5433:5432"]
+      - ./seeds:/seeds:ro
+    ports: ["${VO_BIND:-127.0.0.1}:5433:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vo} -d ${POSTGRES_DB:-world}"]
       interval: 3s
@@ -55,7 +61,7 @@ services:
       VO_JWT_ISSUER: ${VO_JWT_ISSUER:-http://localhost:8081/realms/virtualorg}
       VO_JWT_AUDIENCE: ${VO_JWT_AUDIENCE:-vo-kit}
       VO_EVIDENCE_SECRET: ${VO_EVIDENCE_SECRET:-}
-    ports: ["8080:8080"]
+    ports: ["${VO_BIND:-127.0.0.1}:8080:8080"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import httpx;httpx.get('http://localhost:8080/healthz').raise_for_status()\""]
       interval: 5s
@@ -76,7 +82,7 @@ services:
       VO_TOKEN: ${VO_TOKENS:-vo-dev-token}
       VO_CC_PORT: ${VO_CC_PORT:-3000}
     command: ["uvicorn", "control_center.app:app", "--host", "0.0.0.0", "--port", "3000"]
-    ports: ["${VO_CC_PORT:-3000}:3000"]
+    ports: ["${VO_BIND:-127.0.0.1}:${VO_CC_PORT:-3000}:3000"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import httpx;httpx.get('http://localhost:3000/healthz').raise_for_status()\""]
       interval: 5s
@@ -98,7 +104,7 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
     volumes:
       - ./keycloak:/opt/keycloak/data/import:ro
-    ports: ["8081:8080"]
+    ports: ["${VO_BIND:-127.0.0.1}:8081:8080"]
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /realms/virtualorg HTTP/1.1\nhost: localhost\n\n' >&3 && cat <&3 | grep -q '200 OK'"]
       interval: 5s
@@ -112,8 +118,8 @@ services:
     image: wiremock/wiremock:3.10.0
     command: ["--global-response-templating", "--verbose"]
     volumes:
-      - ./wiremock:/home/wiremock
-    ports: ["8090:8080"]
+      - ./wiremock:/home/wiremock:ro
+    ports: ["${VO_BIND:-127.0.0.1}:8090:8080"]
     mem_limit: 512m
 
   # The kit under test — CI only.

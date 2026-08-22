@@ -448,6 +448,40 @@ check("no lens claims verification without a capture date",
           for v in prov["lenses"].values()),
       "status is derived, not asserted")
 
+# ---- 4d-i. the network boundary SECURITY.md depends on
+# Asked of Docker rather than parsed by hand: `docker compose config` expands
+# ${VO_BIND:-127.0.0.1} the same way the daemon will, so this tests the binding
+# that actually happens. Docker's short port form binds 0.0.0.0, so dropping the
+# host part of any of these would silently put a Postgres superuser and an
+# unauthenticated WireMock admin API on the local network.
+print("\nNetwork boundary")
+import subprocess, json as _json
+try:
+    _raw = subprocess.run(["docker", "compose", "--profile", "chaos", "config", "--format", "json"],
+                          cwd=ROOT, capture_output=True, text=True, timeout=60)
+    _cfg = _json.loads(_raw.stdout) if _raw.returncode == 0 else None
+except Exception:
+    _cfg = None
+
+if _cfg is None:
+    print("        (docker compose unavailable; boundary not checked)")
+else:
+    _wide, _n = [], 0
+    for _name, _svc in (_cfg.get("services") or {}).items():
+        for _p in (_svc.get("ports") or []):
+            _n += 1
+            _host = _p.get("host_ip") or "0.0.0.0"
+            if not _host.startswith("127."):
+                _wide.append(f"{_name} on {_host}:{_p.get('published')}")
+    check("every published port binds the loopback interface", not _wide,
+          f"{_n} published" + (", exposed: " + ", ".join(_wide) if _wide else ", none on 0.0.0.0"))
+    _rw = [f"{n}: {v.get('source')}" for n, sv in (_cfg.get("services") or {}).items()
+           for v in (sv.get("volumes") or [])
+           if v.get("type") == "bind" and not v.get("read_only")]
+    check("host directories are mounted read-only", not _rw,
+          "nothing inside a container can write into the checkout"
+          if not _rw else ", ".join(_rw))
+
 # ---- 4d-ii. the hardening, asserted rather than assumed
 print("\nAccess control")
 for path in ("/_lens/splunk", "/_provenance", "/_provenance/scanner"):
