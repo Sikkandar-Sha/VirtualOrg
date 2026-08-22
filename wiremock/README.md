@@ -30,7 +30,7 @@ an endpoint.
 that cursor, so it is only reachable by a kit that followed the poisoned one.
 
 Each failure mode owns **one endpoint**, deliberately. Two mappings at the same priority
-matching the same path make which one fires ambiguous — and a harness whose failure
+matching the same path make which one fires ambiguous, and a harness whose failure
 injection is non-deterministic cannot be used to score anything.
 
 ## Reset

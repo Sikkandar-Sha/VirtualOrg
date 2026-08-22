@@ -8,8 +8,8 @@ PostgreSQL, Keycloak and WireMock, each obtained as an official container
 image under its own licence, and on the Python packages listed in
 requirements.txt.
 
-The vendor names appearing in this project — ServiceNow, Splunk, Onspring,
-Okta, Tenable, Workday and CrowdStrike — are trademarks of their respective
+The vendor names appearing in this project (ServiceNow, Splunk, Onspring,
+Okta, Tenable, Workday and CrowdStrike) are trademarks of their respective
 owners. VirtualOrg is not affiliated with, endorsed by, or derived from any
 of them. Its API twins are independent models written from published
 behaviour, and every one is marked "unverified" in twins/provenance.yaml
