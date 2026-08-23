@@ -12,7 +12,8 @@ The input contract is deliberately small. Anything richer becomes a schema peopl
 argue with instead of a benchmark they run.
 
     {
-      "meta": {"world_seed": 48392, "as_of": "2026-08-21", "generator_version": "3"},
+      "meta": {"world_seed": 48392, "as_of": "2026-08-21", "scale": 1.0,
+               "chaos": 1, "generator_version": "4"},
       "findings":     [{"family": "conflict", "subject_kind": "control", "subject_id": "CTL-017"}],
       "attributions": [{"evidence_id": "EVD-000123", "control_id": "CTL-045"}]
     }
@@ -31,7 +32,24 @@ import httpx
 # The answer key comes from the Control Center, never from the twins: a kit that
 # could fetch its own marking scheme would not be measuring anything. It also means
 # this runs against a remote VirtualOrg with nothing installed but httpx.
-CC = os.environ.get("VO_CC_BASE", "http://127.0.0.1:3000")
+def _dotenv(name, default):
+    """The README tells you to set ports in .env, which only docker compose reads.
+    An exported variable still wins; this just stops the documented edit from
+    silently having no effect here."""
+    if os.environ.get(name):
+        return os.environ[name]
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "..", ".env")) as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith(name + "="):
+                    return line.split("=", 1)[1].split("#")[0].strip() or default
+    except OSError:
+        pass
+    return default
+
+
+CC = _dotenv("VO_CC_BASE", "") or f"http://127.0.0.1:{_dotenv('VO_CC_PORT', '3000')}"
 
 
 def pct(n, d):
@@ -62,11 +80,11 @@ def load_aliases(gt):
     back is the same entity-resolution problem the kit itself had to solve, so the
     scorer does it rather than demanding ids the kit has no way to know.
     """
-    return {(a["kind"], a["alias"]): a["id"] for a in gt["aliases"]}
+    return {(a["kind"].lower(), a["alias"]): a["id"] for a in gt["aliases"]}
 
 
 def resolve(alias, kind, value):
-    return alias.get((kind, str(value).strip().lower()), value)
+    return alias.get((str(kind).strip().lower(), str(value).strip().lower()), value)
 
 
 def load_truth(gt):
@@ -74,12 +92,14 @@ def load_truth(gt):
     for r in gt["expectations"]:
         key = (r["family"], r["subject_kind"], r["subject_id"])
         truth.setdefault(key, []).append(r["id"])
-        claims[key] = r["claim"]
-    # keyed by evidence id AND by the source record it came from, because a kit sees
-    # `ALR-000123` from Splunk and has no way to know the evidence row is `EVD-000456`
+        claims.setdefault(key, []).append(r["claim"])
+    # Keyed by evidence id AND by the source record it came from, because a kit sees
+    # `ALR-000123` from Splunk and cannot know the evidence row is `EVD-000456`. Both
+    # keys resolve to the SAME canonical row id, so claiming one link under both
+    # spellings is one claim rather than two. Counting it twice let recall exceed 1.
     ev = {}
     for r in gt["evidence"]:
-        row = (r["control_id"], r["is_trap"], r.get("reachable", True))
+        row = (r["id"], r["control_id"], r["is_trap"], r.get("reachable", True))
         ev[r["id"]] = row
         if r.get("source_ref"):
             ev.setdefault(r["source_ref"], row)
@@ -130,17 +150,34 @@ def main():
     # ---- findings
     alias = load_aliases(gt)
     claimed, unresolved = set(), []
-    for f in posture.get("findings", []):
-        kind, raw = f.get("subject_kind"), f.get("subject_id")
+    for i, f in enumerate(posture.get("findings", [])):
+        fam = str(f.get("family") or "").strip().lower()
+        if not fam:
+            print(f"finding {i} has no `family`; every finding needs one of "
+                  f"absence, conflict, degradation.", file=sys.stderr)
+            return 2
+        # Normalise the kind exactly as the identifier is normalised. Doing one and
+        # not the other made "Asset" score zero against "asset" and then report the
+        # subject as unresolvable, which it was not.
+        kind = str(f.get("subject_kind") or "").strip().lower()
+        raw = f.get("subject_id")
         canon = resolve(alias, kind, raw)
         if canon == raw and (kind, str(raw).strip().lower()) not in alias:
-            unresolved.append(f"{kind}/{raw}")
-        claimed.add((f.get("family"), kind, canon))
-    # `attribution` expectations describe the traps, and are scored properly in the
+            if fam != "attribution":
+                unresolved.append(f"{kind}/{raw}")
+        claimed.add((fam, kind, canon))
+    # `attribution` expectations describe the decoys, and are scored properly in the
     # Attribution section below. Counting them here as well would double-count and
     # depress recall for a reason that is not the kit's doing.
     SCORED_AS_FINDINGS = {"absence", "conflict", "degradation"}
     truth = {k: v for k, v in truth.items() if k[0] in SCORED_AS_FINDINGS}
+    # A claim under a family that does not exist is wrong, not invisible. Dropping
+    # these silently meant precision could not be damaged by any amount of garbage.
+    ignored_attribution = sum(1 for k in claimed if k[0] == "attribution")
+    unknown_family = sorted({k[0] for k in claimed
+                             if k[0] not in SCORED_AS_FINDINGS and k[0] != "attribution"},
+                            key=str)
+    bogus = {k for k in claimed if k[0] in unknown_family}
     claimed = {k for k in claimed if k[0] in SCORED_AS_FINDINGS}
     fams = sorted({k[0] for k in truth} | {k[0] for k in claimed if k[0]})
     rows, totals = [], {"tp": 0, "fp": 0, "fn": 0}
@@ -152,39 +189,63 @@ def main():
         rows.append({"family": fam, "expected": len(t), "claimed": len(c),
                      "correct": tp, "spurious": fp, "missed": fn,
                      "precision": pct(tp, tp + fp), "recall": pct(tp, tp + fn)})
+    if bogus:
+        totals["fp"] += len(bogus)
+        rows.append({"family": "unrecognised", "expected": 0, "claimed": len(bogus),
+                     "correct": 0, "spurious": len(bogus), "missed": 0,
+                     "precision": 0.0, "recall": 0.0})
 
     # ---- attribution
-    # Deduplicated: naming the same evidence twice is one claim, not two, and without
-    # this `missed` can go negative and recall can exceed 1.0.
-    att, seen_ev = [], set()
-    for x in posture.get("attributions", []):
-        k = (x.get("evidence_id"), x.get("control_id"))
-        if k not in seen_ev:
-            seen_ev.add(k)
-            att.append(x)
-    duplicates = len(posture.get("attributions", [])) - len(att)
     a_tp = a_fp = 0
-    traps_taken, unknown = [], 0
-    scored_ev = set()
-    for x in att:
+    traps_taken, unknown, duplicates = [], 0, 0
+    contradictions = 0
+    unreachable_correct = 0
+    scored_ev = {}
+    # Collect first, score afterwards. Scoring as we go meant a contradiction
+    # discovered late could not retract the claim already counted, so the same
+    # posture scored differently depending on the order of its array.
+    for x in posture.get("attributions", []):
         eid, cid = x.get("evidence_id"), x.get("control_id")
         if eid not in evidence:
             unknown += 1
             continue
-        true_cid, is_trap, _ = evidence[eid]
+        canonical, true_cid, is_trap, reachable = evidence[eid]
         cid = resolve(alias, "control", cid)   # a kit emits C-011, not CTL-011
-        scored_ev.add(eid)
-        if is_trap:
-            traps_taken.append((eid, cid, true_cid))
+        if canonical in scored_ev:
+            if cid in scored_ev[canonical]:
+                duplicates += 1      # the same link, named a second way
+            else:
+                scored_ev[canonical].add(cid)
+            continue
+        scored_ev[canonical] = {cid}
+
+    for canonical, cids in scored_ev.items():
+        _, true_cid, is_trap, reachable = evidence[canonical]
+        if len(cids) > 1:
+            # Two different answers for one row. Which arrived first is not a
+            # property of the kit, so neither is credited and the row costs one.
+            contradictions += 1
             a_fp += 1
-        elif cid == true_cid:
+            continue
+        cid = next(iter(cids))
+        if is_trap:
+            if reachable:
+                traps_taken.append((canonical, cid, true_cid))
+            a_fp += 1
+        elif cid != true_cid:
+            a_fp += 1
+        elif reachable:
             a_tp += 1
         else:
-            a_fp += 1
+            # correct, but against a link no API exposes, so it cannot count toward a
+            # recall measured over reachable links
+            unreachable_correct += 1
     # counted from the rows, not from `evidence`, which holds two keys per row
     a_total = sum(1 for r in gt["evidence"] if not r["is_trap"])
     a_reach = sum(1 for r in gt["evidence"] if not r["is_trap"] and r.get("reachable", True))
-    n_traps = sum(1 for r in gt["evidence"] if r["is_trap"])
+    # Same correction as the recall denominator: a trap on an alert Splunk never
+    # returns cannot be taken, so counting it makes the score look better than it is.
+    n_traps = sum(1 for r in gt["evidence"] if r["is_trap"] and r.get("reachable", True))
     a_fn = max(0, a_reach - a_tp)
 
     result = {
@@ -193,8 +254,11 @@ def main():
                      "precision": pct(totals["tp"], totals["tp"] + totals["fp"]),
                      "recall": pct(totals["tp"], totals["tp"] + totals["fn"]), **totals},
         "unresolved_subjects": unresolved,
-        "attribution": {"claimed": len(att), "duplicates_ignored": duplicates,
+        "attribution": {"claimed": len(posture.get("attributions", [])),
+                        "scored": len(scored_ev), "duplicates_ignored": duplicates,
+                        "contradictions": contradictions,
                         "correct": a_tp, "wrong": a_fp, "missed": a_fn,
+                        "correct_but_unreachable": unreachable_correct,
                         "true_links": a_total, "reachable_links": a_reach,
                         "traps_total": n_traps, "traps_taken": len(traps_taken),
                         "unknown_evidence_ids": unknown,
@@ -212,7 +276,11 @@ def main():
           f"chaos={live.get('chaos')} generator_version={live.get('generator_version')}")
     if mismatch:
         print("  WARNING: forced past a world mismatch; these numbers mean nothing")
-    print("\nFindings   (attribution is scored separately, below)")
+    print("\nFindings")
+    print("  Counted by distinct (family, subject_kind, subject_id), which is what a kit")
+    print("  can express. The ground-truth catalogue counts expectation rows, and one")
+    print("  subject can carry several, so its totals are higher. Attribution is scored")
+    print("  separately, below.")
     print(f"  {'family':<13}{'expected':>9}{'claimed':>9}{'correct':>9}"
           f"{'missed':>8}{'spurious':>10}{'precision':>11}{'recall':>9}")
     for r in rows:
@@ -222,33 +290,53 @@ def main():
     print(f"  {'all':<13}{f['tp'] + f['fn']:>9}{f['tp'] + f['fp']:>9}{f['tp']:>9}"
           f"{f['fn']:>8}{f['fp']:>10}{fmt(f['precision']):>11}{fmt(f['recall']):>9}")
 
+    if ignored_attribution:
+        print(f"  {ignored_attribution:,} finding{'' if ignored_attribution == 1 else 's'} in the attribution family {'is' if ignored_attribution == 1 else 'are'} not scored")
+        print( "  here. Attribution is scored from the `attributions` array, below.")
+
     at = result["attribution"]
     print(f"\nAttribution")
-    print(f"  {at['claimed']:,} attributions claimed")
+    print(f"  {at['claimed']:,} attributions claimed, {at['scored']:,} distinct links scored")
     print(f"  correct {at['correct']:,}   wrong {at['wrong']:,}   missed {at['missed']:,}")
     print(f"  precision {fmt(at['precision'])}   recall {fmt(at['recall'])}")
     print(f"  recall is against the {at['reachable_links']:,} true links whose source record")
-    print(f"  a connector can actually see. The world holds {at['true_links']:,} in total; the")
-    print(f"  difference is control-test history, which the GRC API never exposes.")
+    print(f"  a connector can actually retrieve. The world holds {at['true_links']:,} in total;")
+    print( "  the rest sit behind control-test history the GRC API never exposes, or on")
+    print( "  alerts outside Splunk's retention window or on assets its coverage misses.")
     if at["duplicates_ignored"]:
-        print(f"  {at['duplicates_ignored']:,} duplicate attributions ignored")
+        print(f"  {at['duplicates_ignored']:,} repeat claims on a link already scored, ignored")
+    if at["contradictions"]:
+        print(f"  {at['contradictions']:,} links claimed twice naming different controls, "
+              f"scored wrong")
+    if at["correct_but_unreachable"]:
+        print(f"  {at['correct_but_unreachable']:,} correct against links no API exposes, "
+              f"excluded from recall")
     print(f"  traps taken {at['traps_taken']} of {at['traps_total']}")
     if at["unknown_evidence_ids"]:
+        rate = at["unknown_evidence_ids"] / max(1, at["claimed"])
         print(f"  {at['unknown_evidence_ids']:,} attributions name a source record with no")
         print( "  ground-truth link. Only a sample of alerts was labelled, so these are")
-        print( "  neither right nor wrong: they are unscoreable, and a kit that emits many")
-        print( "  of them is guessing rather than inferring.")
+        print( "  neither right nor wrong: they are unscoreable.")
+        print(f"  unscoreable rate {rate:.1%} of everything claimed")
+        if rate >= 0.5:
+            print( "  More than half of this output could not be scored either way. The")
+            print( "  precision above describes the minority that could be, and a kit can")
+            print( "  raise it by emitting more of what does not count. Read it with that")
+            print( "  in mind: on these numbers the kit is guessing more often than not.")
     if unresolved:
         print(f"\n{len(unresolved)} subjects could not be resolved to anything in the world")
-        print("  Every one of these is counted as spurious. Check the identifier you emitted.")
+        print("  These are scored against the family they were claimed under, like any")
+        print("  other finding. Check the identifier you emitted.")
         for u in unresolved[:8]:
             print(f"    {u}")
 
     if traps_taken:
         print(f"\nTraps taken, first {min(a.traps, len(traps_taken))}")
-        print("  These events are topically adjacent to the control they were attributed")
-        print("  to, and are not evidence for it. Falling for one is the failure mode this")
-        print("  environment exists to measure.")
+        print("  These events are not evidence for any control. The decoy each was")
+        print("  planted against is drawn from the whole control library, so a trap is")
+        print("  not reliably topically adjacent: asserting a link to one means")
+        print("  asserting a link the world does not support, which is the failure")
+        print("  this environment exists to measure.")
         for eid, said, decoy in traps_taken[:a.traps]:
             print(f"    {eid}  attributed to {said}; this event evidences no control, "
                   f"and {decoy} is the decoy it was planted against")
@@ -256,8 +344,9 @@ def main():
     missing = [(k, claims[k]) for k in truth if k not in claimed]
     if missing:
         print(f"\nMissed, first 10 of {len(missing)}")
-        for (fam, kind, sid), claim in missing[:10]:
-            print(f"    {fam:<12} {kind}/{sid}  {claim}")
+        for (fam, kind, sid), cl in missing[:10]:
+            extra = f"  (+{len(cl) - 1} more on this subject)" if len(cl) > 1 else ""
+            print(f"    {fam:<12} {kind}/{sid}  {cl[0]}{extra}")
     return 0
 
 

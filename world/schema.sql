@@ -225,8 +225,10 @@ CREATE TABLE attachment (
   filename    text NOT NULL,
   media_type  text NOT NULL,
   size_bytes  int NOT NULL,
-  uploaded_on date NOT NULL,
-  sha256      text NOT NULL
+  uploaded_on  date NOT NULL,
+  -- Seeds the deterministic body. The digest the API advertises is computed from
+  -- the bytes actually served, so a connector that verifies it succeeds.
+  content_seed text NOT NULL
 );
 
 CREATE TABLE risk (

@@ -4,7 +4,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME="${1:-baseline}"
-DSN="${VO_DSN:-postgresql://vo@127.0.0.1:5433/world}"
+# The dev password, same one docker-compose.yml and SECURITY.md name. Without
+# it psql fails from the host: the container trusts loopback only from inside.
+DSN="${VO_DSN:-postgresql://vo:${POSTGRES_PASSWORD:-vo}@127.0.0.1:5433/world}"
 mkdir -p seeds
-pg_dump -Fc -n world "$DSN" > "seeds/${NAME}.dump"
+# Write to a temporary file and move it into place only on success. `> file` truncates
+# before pg_dump runs, so a failure here used to leave a zero-byte baseline on disk,
+# which `scripts/reset` would then "restore" after dropping the schema.
+TMP="seeds/.${NAME}.dump.$$"
+trap 'rm -f "$TMP"' EXIT
+if ! pg_dump -Fc -n world "$DSN" > "$TMP"; then
+  echo "pg_dump failed; seeds/${NAME}.dump left untouched" >&2
+  echo "(need the PostgreSQL client tools: brew install libpq && brew link --force libpq)" >&2
+  exit 1
+fi
+[ -s "$TMP" ] || { echo "pg_dump produced an empty file; refusing to save it" >&2; exit 1; }
+mv "$TMP" "seeds/${NAME}.dump"
 echo "==> seeds/${NAME}.dump ($(du -h "seeds/${NAME}.dump" | cut -f1))"

@@ -2,9 +2,12 @@
 
 Twins never misbehave. This does. (DESIGN.md #2)
 
-WireMock sits in front of `twin-gateway` and serves the **degradation** assertion
+WireMock sits in front of `twin-gateway` and exercises the **degradation** assertion
 family (#7). A catch-all mapping proxies everything to the twin, so the happy path is
 identical to hitting `:8080` directly; the failure mappings intercept specific paths.
+
+It is no longer that family's only source: the world generates 30 degradation
+expectations of its own, so the family stays live with WireMock down.
 
 ```bash
 docker compose --profile chaos up -d

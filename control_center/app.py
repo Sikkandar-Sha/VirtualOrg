@@ -17,7 +17,7 @@ import os
 import textwrap
 from typing import Optional
 
-from fastapi import FastAPI, Request
+from fastapi import HTTPException, FastAPI, Query, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -71,11 +71,29 @@ def asset_version():
         return "0"
 
 
+def _retention_floor(now, retention_days):
+    """The older of the lens window and the world's own start, plus whether the world
+    is what limits it. A lens cannot retain data from before the world began."""
+    _, meta = world_now()
+    window = now - dt.timedelta(days=retention_days)
+    start = meta.get("history_start")
+    if start:
+        if isinstance(start, str):
+            start = dt.date.fromisoformat(start)
+        start_ts = dt.datetime.combine(start, dt.time(9, 0), tzinfo=dt.timezone.utc)
+        if window < start_ts:
+            return start_ts, True
+    return window, False
+
+
 def page(request, template, **ctx):
     _, meta = world_now()
+    # Counted, never written down. Prose that says "three vendor faces" beside a
+    # diagram drawing seven is exactly the drift this page exists to avoid.
     return T.TemplateResponse(request, template,
                               {"surfaces": SURFACES, "meta": meta, "path": request.url.path,
-                               "v": asset_version(), **ctx})
+                               "v": asset_version(), "lens_count": len(Q.lenses()),
+                               "lens_count_word": spell(len(Q.lenses())).lower(), **ctx})
 
 
 def stale_for(last_seen, now):
@@ -210,14 +228,17 @@ def lens_detail(request: Request, lens_id: str, call: Optional[str] = None,
                 prov=probes.provenance().get("lenses", {}).get(lens_id),
                 selected=call, profile=profile or PROFILES[0], profiles=PROFILES,
                 horizon=now - dt.timedelta(minutes=l["latency_minutes"]),
-                floor=now - dt.timedelta(days=l["retention_days"]), now=now,
+                # A 3650-day window on a three-year world implied seven years of data
+                # that cannot exist. Show where the data actually starts.
+                floor=_retention_floor(now, l["retention_days"])[0],
+                capped=_retention_floor(now, l["retention_days"])[1], now=now,
                 counts=[c for c in Q.lens_entity_counts() if c["lens_id"] == lens_id])
 
 
 # ------------------------------------------------------------ surface 4: the org
 @app.get("/org")
 def org(request: Request, tab: str = "overview", q: Optional[str] = None,
-        kind: Optional[str] = None, leavers: int = 0, offset: int = 0):
+        kind: Optional[str] = None, leavers: int = Query(0, ge=0), offset: int = Query(0, ge=0)):
     ctx = {"tab": tab, "q": q or "", "kind": kind or "", "leavers": leavers, "offset": offset}
     if tab == "people":
         ctx["rows"] = Q.people(limit=80, offset=offset, q=q, leavers_only=bool(leavers))
@@ -245,8 +266,9 @@ def person_detail(request: Request, person_id: str):
 
 # --------------------------------------------------------- surface 5: ground truth
 @app.get("/groundtruth")
-def groundtruth(request: Request, family: Optional[str] = None, offset: int = 0):
+def groundtruth(request: Request, family: Optional[str] = None, offset: int = Query(0, ge=0)):
     return page(request, "groundtruth.html", families=Q.expectation_families(),
+                subject_counts=Q.expectation_subject_counts(),
                 rows=Q.expectations(family=family, offset=offset),
                 total=Q.expectation_total(family=family), family=family or "",
                 offset=offset, corpus=Q.attribution_corpus())
@@ -387,7 +409,9 @@ def _curl(method, path, params, profile):
 def manual(request: Request, ch: str = "overview"):
     keys = [k for k, _ in CHAPTERS]
     if ch not in keys:
-        ch = "overview"
+        # A wrong or stale chapter must not look like it worked. Falling back to
+        # Overview with a 200 hid renamed chapters from CI and from readers alike.
+        raise HTTPException(404, f"no such chapter: {ch}. Chapters: {', '.join(keys)}")
     ctx = {"chapter": ch, "chapters": CHAPTERS,
            "cc_port": os.environ.get("VO_CC_PORT", "3000")}
 

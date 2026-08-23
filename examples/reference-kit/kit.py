@@ -12,7 +12,7 @@ environment was built to expose:
   * it finds orphaned access only because it joins HR to the IdP on email, which is
     the correlation the environment forces
   * it attributes alerts to controls by matching words, which is exactly the naive
-    inference the 773 traps are there to punish
+    inference the planted traps are there to punish
 
 Run it against a live VirtualOrg, then score the result:
 

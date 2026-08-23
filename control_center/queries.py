@@ -6,6 +6,8 @@ computation." So this module returns rows and counts; it does not aggregate,
 score, weight or infer. Anything that looks like business logic belongs in the
 kit under test, not in the harness that grades it.
 """
+from psycopg2 import sql
+
 from twins import db
 
 
@@ -19,7 +21,8 @@ def table_counts():
                       WHERE table_schema = 'world' ORDER BY table_name""")
     out = []
     for t in tables:
-        n = db.one(f'SELECT count(*) n FROM world."{t["table_name"]}"')["n"]
+        n = db.one(sql.SQL('SELECT count(*) n FROM world.{}').format(
+            sql.Identifier(t["table_name"])))["n"]
         out.append({"table": t["table_name"], "rows": n})
     return out
 
@@ -29,7 +32,17 @@ def lenses():
 
 
 def lens(lens_id):
-    return db.one("SELECT * FROM lens WHERE id = %s", (lens_id,))
+    row = db.one("SELECT * FROM lens WHERE id = %s", (lens_id,))
+    if not row:
+        return row
+    row = dict(row)
+    # The noun this lens actually deals in. Hardcoding "asset" made the IAM page say
+    # it "calls every asset by its username" when it returns no assets at all.
+    kinds = [r["entity_kind"] for r in db.q(
+        """SELECT entity_kind, count(*) n FROM lens_visibility
+            WHERE lens_id = %s GROUP BY 1 ORDER BY n DESC""", (lens_id,))]
+    row["subject"] = kinds[0] if kinds else "entity"
+    return row
 
 
 def lens_entity_counts():
@@ -40,7 +53,10 @@ def lens_entity_counts():
 # ------------------------------------------------- surface 1: one entity, every lens
 def asset(asset_id):
     return db.one("""SELECT a.*, p.full_name AS owner_name, p.ended_on AS owner_ended_on,
-                            p.email AS owner_email, p.id AS owner_id
+                            p.email AS owner_email, p.id AS owner_id,
+                            -- HR is a lens, and for employees it reports the
+                            -- termination. Only contractors are invisible to it.
+                            p.employment AS owner_employment
                        FROM asset a LEFT JOIN person p ON p.id = a.owner_person_id
                       WHERE a.id = %s""", (asset_id,))
 
@@ -319,6 +335,15 @@ def expectation_families():
                     GROUP BY 1,2 ORDER BY 1, 3 DESC""")
 
 
+def expectation_subject_counts():
+    """Rows and distinct subjects per family. A kit emits one finding per subject, so
+    the distinct count is what scripts/score measures against; the row count is what
+    the catalogue holds. Showing only one of them made the two surfaces disagree."""
+    return db.q("""SELECT family, count(*) AS rows,
+                          count(DISTINCT (subject_kind, subject_id)) AS subjects
+                     FROM expectation GROUP BY family ORDER BY family""")
+
+
 def expectations(family=None, limit=200, offset=0):
     sql = "SELECT * FROM expectation WHERE 1=1"
     params = []
@@ -340,11 +365,20 @@ def expectation_total(family=None):
 
 
 def attribution_corpus():
-    """Precision/recall denominators for the attribution family."""
-    return db.one("""SELECT count(*) FILTER (WHERE NOT is_trap) AS true_links,
-                            count(*) FILTER (WHERE is_trap)     AS traps,
-                            count(DISTINCT control_id)          AS controls_with_evidence
-                       FROM evidence""")
+    """Precision/recall denominators for the attribution family.
+
+    Both the planted totals and the retrievable ones. A page that shows only the
+    planted count tells a reader they face 752 decoys when the APIs will only ever
+    hand them 247, which is the number `scripts/score` reports against."""
+    reach = {r["id"] for r in groundtruth_export()["evidence"] if r["reachable"]}
+    row = dict(db.one("""SELECT count(*) FILTER (WHERE NOT is_trap) AS true_links,
+                                count(*) FILTER (WHERE is_trap)     AS traps,
+                                count(DISTINCT control_id) AS controls_with_evidence
+                           FROM evidence"""))
+    live = db.q("SELECT id, is_trap FROM evidence")
+    row["reachable_links"] = sum(1 for r in live if not r["is_trap"] and r["id"] in reach)
+    row["reachable_traps"] = sum(1 for r in live if r["is_trap"] and r["id"] in reach)
+    return row
 
 
 # ------------------------------------------- where the graph breaks (#7 absence)
@@ -354,84 +388,84 @@ def attribution_corpus():
 # health." Each gap records whether the kit could even see it through the APIs.
 SPINE_GAPS = [
     ("applications attached to no business service", "application",
-     """SELECT count(*) n FROM application a WHERE NOT EXISTS (
-          SELECT 1 FROM service_dependency d WHERE d.application_id = a.id)""",
-     "SELECT count(*) n FROM application", True,
+     """SELECT count(*) n FROM world.application a WHERE NOT EXISTS (
+          SELECT 1 FROM world.service_dependency d WHERE d.application_id = a.id)""",
+     "SELECT count(*) n FROM world.application", True,
      "Nothing depends on them, so they carry no inherited criticality. Now a tuned, "
      "deliberate slice recorded in world.expectation, and discoverable, by diffing "
      "cmdb_ci_appl against the parents of cmdb_rel_ci."),
 
     ("business services with no application", "business_service",
-     """SELECT count(*) n FROM business_service s WHERE NOT EXISTS (
-          SELECT 1 FROM service_dependency d WHERE d.service_id = s.id)""",
-     "SELECT count(*) n FROM business_service", True,
+     """SELECT count(*) n FROM world.business_service s WHERE NOT EXISTS (
+          SELECT 1 FROM world.service_dependency d WHERE d.service_id = s.id)""",
+     "SELECT count(*) n FROM world.business_service", True,
      "A service with no dependencies cannot have residual risk computed for it."),
 
     ("applications running on no asset", "application",
-     """SELECT count(*) n FROM application a WHERE NOT EXISTS (
-          SELECT 1 FROM application_asset x WHERE x.application_id = a.id)""",
-     "SELECT count(*) n FROM application", True,
+     """SELECT count(*) n FROM world.application a WHERE NOT EXISTS (
+          SELECT 1 FROM world.application_asset x WHERE x.application_id = a.id)""",
+     "SELECT count(*) n FROM world.application", True,
      "The app-to-infrastructure link is broken; no vulnerability can reach the service."),
 
     # scoped to servers and cloud: endpoints never carry an application by
     # construction, so measuring them here would report 85% and mean nothing
     ("servers and cloud carrying no application", "asset",
-     """SELECT count(*) n FROM asset a WHERE a.decommissioned_on IS NULL
+     """SELECT count(*) n FROM world.asset a WHERE a.decommissioned_on IS NULL
           AND a.kind IN ('server','cloud')
-          AND NOT EXISTS (SELECT 1 FROM application_asset x WHERE x.asset_id = a.id)""",
-     """SELECT count(*) n FROM asset WHERE decommissioned_on IS NULL
+          AND NOT EXISTS (SELECT 1 FROM world.application_asset x WHERE x.asset_id = a.id)""",
+     """SELECT count(*) n FROM world.asset WHERE decommissioned_on IS NULL
           AND kind IN ('server','cloud')""", True,
      "Infrastructure nothing is known to run on. Endpoints are excluded, they never "
      "carry an application in this world."),
 
     ("live assets invisible to every security lens", "asset",
-     """SELECT count(*) n FROM asset a WHERE a.decommissioned_on IS NULL
-          AND NOT EXISTS (SELECT 1 FROM lens_visibility v
+     """SELECT count(*) n FROM world.asset a WHERE a.decommissioned_on IS NULL
+          AND NOT EXISTS (SELECT 1 FROM world.lens_visibility v
                            WHERE v.entity_id = a.id AND v.entity_kind = 'asset'
-                             AND v.lens_id = 'splunk')""",
-     "SELECT count(*) n FROM asset WHERE decommissioned_on IS NULL", True,
+                             AND v.lens_id IN ('splunk', 'scanner', 'edr'))""",
+     "SELECT count(*) n FROM world.asset WHERE decommissioned_on IS NULL", True,
      "The absence family's headline. Recorded as expectations, scoreable."),
 
     ("controls with no evidence of any kind", "control",
-     """SELECT count(*) n FROM control c WHERE NOT EXISTS (
-          SELECT 1 FROM evidence e WHERE e.control_id = c.id AND NOT e.is_trap)""",
-     "SELECT count(*) n FROM control", True,
+     """SELECT count(*) n FROM world.control c WHERE NOT EXISTS (
+          SELECT 1 FROM world.evidence e WHERE e.control_id = c.id AND NOT e.is_trap)""",
+     "SELECT count(*) n FROM world.control", True,
      "Never operationalised. Recorded as expectations, scoreable."),
 
     ("controls mapped to no requirement", "control",
-     """SELECT count(*) n FROM control c WHERE NOT EXISTS (
-          SELECT 1 FROM control_mapping m WHERE m.control_id = c.id)""",
-     "SELECT count(*) n FROM control", True,
+     """SELECT count(*) n FROM world.control c WHERE NOT EXISTS (
+          SELECT 1 FROM world.control_mapping m WHERE m.control_id = c.id)""",
+     "SELECT count(*) n FROM world.control", True,
      "A control that satisfies no requirement cannot move a framework score."),
 
     ("risks mitigated by no control", "risk",
-     """SELECT count(*) n FROM risk r WHERE NOT EXISTS (
-          SELECT 1 FROM risk_control rc WHERE rc.risk_id = r.id)""",
-     "SELECT count(*) n FROM risk", False,
+     """SELECT count(*) n FROM world.risk r WHERE NOT EXISTS (
+          SELECT 1 FROM world.risk_control rc WHERE rc.risk_id = r.id)""",
+     "SELECT count(*) n FROM world.risk", False,
      "Residual equals inherent. risk_control is not exposed by any API."),
 
     ("risks threatening no service", "risk",
-     """SELECT count(*) n FROM risk r WHERE NOT EXISTS (
-          SELECT 1 FROM risk_service rs WHERE rs.risk_id = r.id)""",
-     "SELECT count(*) n FROM risk", False,
+     """SELECT count(*) n FROM world.risk r WHERE NOT EXISTS (
+          SELECT 1 FROM world.risk_service rs WHERE rs.risk_id = r.id)""",
+     "SELECT count(*) n FROM world.risk", False,
      "Cannot be rolled up into per-service posture."),
 
     ("business services whose owner has left", "business_service",
-     """SELECT count(*) n FROM business_service s JOIN person p
+     """SELECT count(*) n FROM world.business_service s JOIN world.person p
           ON p.id = s.owner_person_id WHERE p.ended_on IS NOT NULL""",
-     "SELECT count(*) n FROM business_service", True,
+     "SELECT count(*) n FROM world.business_service", True,
      "Owner name is now exposed on cmdb_ci_service, but not the fact that they left."),
 
     ("controls whose owner has left", "control",
-     """SELECT count(*) n FROM control c JOIN person p
+     """SELECT count(*) n FROM world.control c JOIN world.person p
           ON p.id = c.owner_person_id WHERE p.ended_on IS NOT NULL""",
-     "SELECT count(*) n FROM control", True,
+     "SELECT count(*) n FROM world.control", True,
      "Visible: /grc/api/v1/controls returns the owner name, but not that they left."),
 
     ("live assets with no owner of record", "asset",
-     """SELECT count(*) n FROM asset WHERE decommissioned_on IS NULL
+     """SELECT count(*) n FROM world.asset WHERE decommissioned_on IS NULL
           AND owner_person_id IS NULL""",
-     "SELECT count(*) n FROM asset WHERE decommissioned_on IS NULL", True,
+     "SELECT count(*) n FROM world.asset WHERE decommissioned_on IS NULL", True,
      "By construction, not by accident: only endpoints are given an owner. Server and "
      "cloud ownership is simply not modelled, worth knowing before you build a report "
      "that assumes every asset has a custodian."),
@@ -544,16 +578,43 @@ def groundtruth_export():
                                FROM expectation ORDER BY id""")],
         # source_ref too: a kit sees an alert id or a finding id, never an evidence id,
         # so it can only ever name the source record it was reasoning about.
-        # `reachable` marks the links whose source record a connector can actually see.
-        # control_test evidence is not reachable: the GRC API exposes only the latest
-        # result per control, never the history, so scoring recall against those would
-        # measure something no kit can possibly do.
+        #
+        # `reachable` marks the links whose source record a connector can actually
+        # retrieve, and it is computed against the same windows the twins enforce
+        # rather than assumed. Excluding only control_test history was far too
+        # generous: it left every alert in the denominator, including the ones
+        # Splunk drops for being outside its 90-day retention or on an asset its
+        # 0.83 coverage never sees. A flawless kit was scored against thousands of
+        # links no API would hand it, and told it had missed them.
         "evidence": [
             {"id": r["id"], "source_ref": r["source_ref"], "kind": r["kind"],
              "control_id": r["control_id"], "is_trap": r["is_trap"],
-             "reachable": r["kind"] != "control_test"}
-            for r in db.q("""SELECT id, source_ref, kind, control_id, is_trap
-                               FROM evidence ORDER BY id""")],
+             "reachable": r["reachable"]}
+            for r in db.q("""
+                WITH w AS (
+                  SELECT (((SELECT value FROM world_meta WHERE key = 'as_of')::date
+                           + time '09:00') AT TIME ZONE 'UTC') AS now_ts),
+                     sp AS (SELECT latency_minutes, retention_days
+                              FROM lens WHERE id = 'splunk')
+                SELECT e.id, e.source_ref, e.kind, e.control_id, e.is_trap,
+                       CASE
+                         -- the GRC API exposes only the latest result per control,
+                         -- never the history
+                         WHEN e.kind = 'control_test' THEN false
+                         -- every finding is listed, with no visibility filter
+                         WHEN e.kind = 'finding' THEN true
+                         WHEN e.kind = 'alert' THEN EXISTS (
+                           SELECT 1 FROM alert a
+                             JOIN lens_visibility v ON v.entity_id = a.asset_id
+                                  AND v.lens_id = 'splunk' AND v.entity_kind = 'asset'
+                            WHERE a.id = e.source_ref
+                              AND a.occurred_at <= (SELECT now_ts FROM w)
+                                  - ((SELECT latency_minutes FROM sp) || ' minutes')::interval
+                              AND a.occurred_at >= (SELECT now_ts FROM w)
+                                  - ((SELECT retention_days FROM sp) || ' days')::interval)
+                         ELSE false
+                       END AS reachable
+                  FROM evidence e ORDER BY e.id""")],
         "aliases": [{"kind": k, "alias": str(a).strip().lower(), "id": i}
                     for k, a, i in alias
                     if a and (k, str(a).strip().lower()) not in ambiguous],

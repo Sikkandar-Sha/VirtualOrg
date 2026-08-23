@@ -59,10 +59,10 @@ token on a surface that has no authentication. CI asserts it across every surfac
 every manual chapter.
 
 Every data endpoint requires a credential, including the `/_lens/{id}` and
-`/_provenance` metadata routes. Three paths stay open: `/healthz`, which probes and CI
+`/_provenance` metadata routes. Four paths stay open: `/healthz`, which probes and CI
 need before they have anything to authenticate with and which returns only liveness and
-the world's identifying metadata, and FastAPI's own `/docs` and `/openapi.json`, which
-describe the interface and expose no data.
+the world's identifying metadata, and FastAPI's own `/docs`, `/redoc` and
+`/openapi.json`, which describe the interface and expose no data.
 
 ## What VirtualOrg is not
 

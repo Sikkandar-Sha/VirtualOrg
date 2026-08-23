@@ -51,7 +51,11 @@
       {{ 'is' if bands|selectattr('blind')|list|length == 1 else 'are' }} blind to it.
     {%- endif %}
     {%- if a.owner_ended_on %} The owner of record, {{ a.owner_name }}, left the company on
-      {{ a.owner_ended_on }}, no lens knows that.{% endif %}
+      {{ a.owner_ended_on }}.
+      {%- if a.owner_employment == 'contractor' %} No lens knows that: HR is the system
+      of record for leavers and it does not carry contractors.
+      {%- else %} No asset lens knows that; only HR does, and joining the two is the
+      inference.{% endif %}{% endif %}
     {%- if not seen %} No lens sees this machine at all.{% endif %}
   </p>
 </div>

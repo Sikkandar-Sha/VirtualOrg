@@ -8,3 +8,9 @@ seeds/*.dump
 docker-compose.override.yml
 .DS_Store
 *.log
+
+# scoring output, per the README quick start
+posture*.json
+
+# the binary-evidence example writes here
+out.txt

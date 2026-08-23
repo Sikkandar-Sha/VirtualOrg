@@ -4,8 +4,8 @@
 included.**
 
 [![licence](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
-[![checks](https://img.shields.io/badge/self--checks-89%20passing-brightgreen)](scripts/verify.py)
-[![boot](https://img.shields.io/badge/cold%20boot-~7s-brightgreen)](#run-it)
+[![checks](https://img.shields.io/badge/self--checks-97%20passing-brightgreen)](scripts/verify.py)
+[![boot](https://img.shields.io/badge/cold%20boot-~10s-brightgreen)](#run-it)
 [![lenses](https://img.shields.io/badge/vendor%20lenses-7-informational)](#the-seven-lenses)
 
 > **Everything in this world is invented.** The people, the machines, the CVE
@@ -59,7 +59,7 @@ correlation, conflict and coverage-gap problems your product exists to solve.**
 
 ## What you get
 
-**1,217 ground-truth assertions.** `world.expectation` says what your product should
+**1,263 ground-truth assertions.** `world.expectation` says what your product should
 conclude, and what it should refuse to conclude. Four families: attribution, conflict,
 degradation, absence.
 
@@ -68,7 +68,9 @@ degradation, absence.
 **An answer key for attribution.** Nothing in any vendor API links a SIEM detection to a
 GRC control. That inference is your product's core job, and the thing most likely to be
 wrong in a way nobody notices. `world.evidence.control_id` holds the true link for
-**5,023** events, and `is_trap` marks **773** topically-adjacent decoys. Score precision
+**4,983** events, and `is_trap` marks **747** decoys drawn from the whole control
+library. Where `is_trap` is false, `control_id` is the true attribution; on a decoy it
+is the control the event was planted against. Score precision
 and recall against it.
 
 **Determinism.** Same seed and same `--as-of` produce a byte-identical world, so a
@@ -77,7 +79,7 @@ posture change without a world change is a regression. No live clock anywhere.
 **A sub-second reset.** Snapshot the world, run your product, assert, restore. That is
 what makes world-state `W₁` → posture `P₁` golden-file testing usable in practice.
 
-**Seven connector patterns**, three customer schema profiles per vendor, a chaos dial,
+**Seven connector patterns**, three customer schema profiles on the ServiceNow lens, a chaos dial,
 real OAuth, and an adversarial proxy that returns 429s and expired tokens on demand.
 
 ## Where it helps
@@ -87,19 +89,37 @@ real OAuth, and an adversarial proxy that returns 429s and expired tokens on dem
 | **Writing connectors** | Seven live API patterns: async job, cursor, offset, Link header, page number, incremental `since` and query-then-hydrate, plus binary evidence retrieval behind a second credential |
 | **Testing entity resolution** | One machine under five identifiers, recycled IPs so the IP is not a key, and one join that *does* work so you can tell the difference |
 | **Guarding against regressions** | A deterministic world and a restorable baseline, so any posture delta is a real finding |
-| **Scoring inference quality** | 5,023 true evidence links and 773 deliberate decoys |
-| **Proving deployability** | Three customer schema profiles per vendor. Passing all three means the connector ships. Passing only `out-of-the-box` means it demos |
-| **Demoing** | *"Here are the 52 machines with no endpoint agent, and the 7 control exceptions that expired months ago. A GRC platform will never tell you that."* |
+| **Scoring inference quality** | 4,983 true evidence links and 747 deliberate decoys |
+| **Proving deployability** | Three customer schema profiles on the ServiceNow lens. Passing all three means the connector ships. Passing only `out-of-the-box` means it demos |
+| **Demoing** | *"Here are the 55 machines with no endpoint agent, and the 7 control exceptions that expired months ago. A GRC platform will never tell you that."* |
 
 ## Run it
+
+Docker is the only requirement for the environment itself.
 
 ```bash
 git clone https://github.com/Sikkandar-Sha/VirtualOrg.git && cd VirtualOrg
 cp .env.example .env
-docker compose up -d          # boots in about seven seconds
+docker compose up -d          # boots in about ten seconds once images are built
 ./scripts/status              # is everything running?
 open http://localhost:3000    # the Control Center
 ```
+
+The helper scripts run on the host rather than in a container, so they need a little
+more. Skip this until you want `scripts/verify.py`, `scripts/score`, the reference kit,
+or the snapshot and reset loop:
+
+```bash
+pip install -r requirements-host.txt   # scripts/verify.py, scripts/score, the kit
+```
+
+`scripts/seed`, `scripts/snapshot` and `scripts/reset` shell out to `psql`, `pg_dump`
+and `pg_restore`, so they also need the PostgreSQL client tools on your PATH
+(`brew install libpq && brew link --force libpq` on macOS, since libpq is
+keg-only and does not reach your PATH otherwise; `apt install postgresql-client` on Debian). Everything
+else works with Docker alone.
+
+If you change `VO_CC_PORT` in `.env`, the scripts read that file, so they follow.
 
 The design rationale lives in [DESIGN.md](DESIGN.md). This file is how to run it.
 
@@ -113,7 +133,6 @@ See DESIGN.md #2 for why.
 
 ```bash
 docker compose --profile chaos up -d   # adds WireMock in front of a twin (see wiremock/README.md)
-docker compose --profile chaos up -d   # adds WireMock in front of a twin (see wiremock/README.md)
 ```
 
 ## The seven lenses
@@ -121,16 +140,17 @@ docker compose --profile chaos up -d   # adds WireMock in front of a twin (see w
 | Path | Vendor shape | Connector pattern | Loss profile |
 |---|---|---|---|
 | `/servicenow/api/now/table/{table}` | generic table API | offset pagination, customer-defined fields | 97% coverage, nightly sync, identifies by **FQDN** |
-
-`{table}` is one of `incident`, `cmdb_ci_computer`, `cmdb_ci_appl`, `cmdb_ci_service`,
-`cmdb_ci_business_process`, `cmdb_sam_sw_install`, `cmdb_rel_ci`. Seven in all. The relationship table makes the spine walkable: service → application →
-asset, with children named exactly as the CI tables name them.
 | `/splunk/services/search/jobs` | async search job | submit → poll → fetch | 83% coverage, 5 min latency, 90d retention, identifies by **IP** |
 | `/grc/api/v1/{object}` | governance objects | cursor pagination | 91% coverage, weekly sync, identifies by **asset tag** |
-| `/iam/api/v1/users` | identity provider | **Link-header** pagination | 94% coverage, 15 min sync, identifies people by **login** |
+| `/iam/api/v1/users` | identity provider | **Link-header** pagination | 94% coverage, 15 min sync, identifies people by **username**, carried as `profile.login` |
 | `/scanner/api/v3/findings` | vulnerability scanner | **incremental `since`** polling | 88% coverage, 24h sync, 365d retention, identifies by **hostname** |
 | `/hr/api/v1/workers` | HCM system of record | **page / per_page** | employees only, contractors are structurally absent, identifies by **employee id** |
 | `/edr/devices/...` | endpoint detection | **query then hydrate** | 79% coverage, 5 min sync, 30d retention, identifies by **agent id** |
+
+`{table}` is one of `incident`, `cmdb_ci_computer`, `cmdb_ci_appl`, `cmdb_ci_service`,
+`cmdb_ci_business_process`, `cmdb_sam_sw_install`, `cmdb_rel_ci`. Seven in all. The
+relationship table makes the spine walkable: service → application → asset, with
+children named exactly as the CI tables name them.
 
 `{object}` is one of `controls`, `assets`, `findings`, `risks`, `control-mappings`,
 `frameworks`, `requirements`, `crosswalks`, `policies`, `exceptions`, `treatments`, and
@@ -186,6 +206,7 @@ ISO/IEC 27001 and NIST CSF 2.0, with controls mapped into both at differing cove
 strength, and a crosswalk where **56 of 70 equivalences are partial**.
 
 ```bash
+H='Authorization: Bearer vo-dev-token'
 curl -s -H "$H" localhost:8080/grc/api/v1/frameworks
 curl -s -H "$H" 'localhost:8080/grc/api/v1/crosswalks?limit=5'
 ```
@@ -196,8 +217,11 @@ same control failure moves ISO and CSF by different amounts, and you can say why
 ## Binary evidence
 
 ```bash
+H='Authorization: Bearer vo-dev-token'
 curl -s -H "$H" localhost:8080/grc/api/v1/findings/AF-001/attachments
-curl -s -H "$H" 'localhost:8080/grc/api/v1/attachments/ATT-0001/content?token=...' -o out.txt
+TOKEN=$(curl -s -H "$H" localhost:8080/grc/api/v1/findings/AF-001/attachments \
+          | python3 -c 'import sys,json; print(json.load(sys.stdin)["attachments"][0]["download_token"])')
+curl -s -H "$H" "localhost:8080/grc/api/v1/attachments/ATT-0001/content?token=$TOKEN" -o out.txt
 ```
 
 Metadata carries size, media type, a SHA-256 and a `download_token`. The bytes need
@@ -231,17 +255,35 @@ python3 examples/reference-kit/kit.py > posture.json
 ```
 
 ```
-Findings   (attribution is scored separately, below)
+Findings
+  Counted by distinct (family, subject_kind, subject_id), which is what a kit
+  can express. The ground-truth catalogue counts expectation rows, and one
+  subject can carry several, so its totals are higher. Attribution is scored
+  separately, below.
   family        expected  claimed  correct  missed  spurious  precision   recall
-  absence            238        3        3     235         0      1.000    0.013
-  conflict           105       59       59      46         0      1.000    0.562
-  degradation         12        0        0      12         0      0.000    0.000
+  absence            280        3        3     277         0      1.000    0.011
+  conflict            94       52       52      42         0      1.000    0.553
+  degradation         32        0        0      32         0      0.000    0.000
+  all                406       55       55     351         0      1.000    0.135
 
 Attribution
-  459 attributions claimed against 5,023 true links
-  precision 0.138   recall 0.002
-  traps taken 12 of 773
+  455 attributions claimed, 455 distinct links scored
+  correct 57   wrong 398   missed 1,128
+  precision 0.125   recall 0.048
+  traps taken 86 of 246
 ```
+
+Two totals appear here and they measure different things. The catalogue above counts
+**expectation rows**, 1,263 of them; the scorer counts **distinct subjects**, because a
+kit emits one finding per subject and one subject can carry several rows. That is why
+absence reads 366 in the catalogue and 280 here.
+
+Recall is measured against the 1,185 true links whose source record a connector can
+actually retrieve, and traps against the 246 it can actually encounter. The world holds
+4,983 links and 747 decoys in total; the rest sit behind control-test history no lens
+exposes, or on alerts outside Splunk's 90-day retention or on assets its 83% coverage
+never sees. Scoring a kit against evidence it was never shown would measure the wrong
+thing, and counting traps it could never meet would flatter it.
 
 The input contract is deliberately small, and findings match on the
 `(family, subject_kind, subject_id)` triple rather than on claim text, so this measures
@@ -249,7 +291,8 @@ whether the right thing was found rather than how it was phrased:
 
 ```json
 {
-  "meta": { "world_seed": 48392, "as_of": "2026-08-21", "generator_version": "2" },
+  "meta": { "world_seed": 48392, "as_of": "2026-08-21", "scale": 1.0,
+             "chaos": 1, "generator_version": "5" },
   "findings":     [{ "family": "conflict", "subject_kind": "control", "subject_id": "C-017" }],
   "attributions": [{ "evidence_id": "ALR-009852", "control_id": "C-011" }]
 }
@@ -263,7 +306,7 @@ different world.
 
 **`examples/reference-kit/`** is a small, readable consumer that produces one. It is
 deliberately naive: it attributes alerts to controls by matching words in the rule name
-against words in the control title, which is exactly the inference the 773 decoys exist
+against words in the control title, which is exactly the inference the 747 decoys exist
 to punish. Its score above is what that approach is worth.
 
 ## Ground truth
@@ -276,24 +319,24 @@ SELECT family, claim, count(*) FROM world.expectation GROUP BY 1,2 ORDER BY 1;
 ```
 
 ```
-absence     asset runs software that is past its end-of-life date                      200
-absence     asset is live but carries no endpoint protection agent                      52
-absence     asset is scanned for vulnerabilities but monitored by no SIEM               29
-absence     control has no evidence source of any kind                                   8
-absence     leaver is a contractor, so no HR record confirms the termination             7
-absence     application is not attached to any business service                          3
-absence     policy is approved but no control implements it                              3
-absence     asset is live and in ITSM but invisible to every security lens               1
-attribution evidence is linked to a control it does not evidence                       773
-conflict    person has left but an account remains enabled                              31
-conflict    person has left but retains membership of a privileged group                21
-conflict    control tested effective while an overdue audit finding stands against it   21
-conflict    risk treatment is overdue while the risk remains above appetite             17
-conflict    incident recorded as no customer impact on a tier-1 service                 16
-conflict    control owner of record has left the company                                12
-conflict    control exception is recorded as active but its expiry date has passed       7
-conflict    risk presented as current but review period has lapsed                       4
-degradation endpoint agent is installed but has not reported in over a week             12
+absence     asset runs software that is past its end-of-life date                       250
+absence     asset is live but carries no endpoint protection agent                       55
+absence     asset is scanned for vulnerabilities but monitored by no SIEM                39
+absence     control has no evidence source of any kind                                    8
+absence     leaver is a contractor, so no HR record confirms the termination              7
+absence     application is not attached to any business service                           3
+absence     policy is approved but no control implements it                               3
+absence     asset is live and in ITSM but invisible to every security lens                1
+attribution evidence is linked to a control it does not evidence                        747
+conflict    person has left but an account remains enabled                               31
+conflict    control owner of record has left the company                                 18
+conflict    person has left but retains membership of a privileged group                 18
+conflict    risk treatment is overdue while the risk remains above appetite              14
+conflict    incident recorded as no customer impact on a tier-1 service                  13
+conflict    control tested effective while an overdue audit finding stands against it    12
+conflict    control exception is recorded as active but its expiry date has passed       10
+conflict    risk presented as current but review period has lapsed                        2
+degradation endpoint agent is installed but has not reported in over a week              32
 ```
 
 Counts are for `--seed 48392 --as-of 2026-08-21 --scale 1.0`. Same seed, same numbers.
@@ -381,7 +424,7 @@ Eight chapters at `/manual`, aimed at someone about to write a connector:
 | The world model | Every table, every column, live row counts, the spine |
 | What you can reach | **Which entities a connector can see through the APIs, and which it cannot** |
 | Where the graph breaks | Cross-table integrity: what exists but is not wired into the spine |
-| Connecting a kit | Base URLs, auth, the config file, the three call patterns, live request/response per lens, the profile field maps |
+| Connecting a kit | Base URLs, auth, the config file, the seven call patterns, live request/response per lens, the profile field maps |
 | API reference | Every endpoint, read from the twin's own route table |
 | Correlation | One real machine as each lens names it, plus the traps |
 | Scoring | The four families, attribution precision/recall, assertion style per output |
@@ -399,7 +442,7 @@ Port 3000 is taken on some machines. Set `VO_CC_PORT` in `.env` to move the host
 
 ```bash
 ./scripts/status                  # terminal
-open http://localhost:3000        # same answer, browsable
+open http://localhost:3000        # the same picture, browsable
 ```
 
 Both probe each dependency the way a consumer would. Splunk is exercised as a full
@@ -438,7 +481,7 @@ VO_AUTH_MODE=jwks docker compose up -d --force-recreate twin-gateway
 TOK=$(curl -s -X POST localhost:8081/realms/virtualorg/protocol/openid-connect/token \
   -d grant_type=client_credentials -d client_id=vo-kit -d client_secret=vo-kit-secret \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-curl -s -H "Authorization: Bearer $TOK" localhost:8080/grc/api/v1/controls?limit=1
+curl -s -H "Authorization: Bearer $TOK" 'localhost:8080/grc/api/v1/controls?limit=1'
 ```
 
 `scripts/verify.py` detects the running mode and checks it either way.
@@ -459,7 +502,8 @@ Every twin therefore carries a provenance manifest in `twins/provenance.yaml`,
 served live and surfaced on the Control Center status board:
 
 ```bash
-curl -s localhost:8080/_provenance | python3 -m json.tool
+H='Authorization: Bearer vo-dev-token'
+curl -s -H "$H" localhost:8080/_provenance | python3 -m json.tool
 ```
 
 **All seven lenses are `unverified`.** Every response shape was written from our
@@ -492,10 +536,10 @@ either agrees with the vendor. Paying that down is Phase 4.
 
 ## Re-baselining
 
-The service→application graph was rebuilt (see `world/generate.py`), which shifts the
-random stream and changes every downstream count. Golden files recorded before that change
-need re-baselining. Determinism is unaffected: the same seed and `--as-of` still produce
-the same world.
+Any change that shifts the generated world bumps `generator_version`, and golden files
+recorded under an earlier one need rebaselining. CHANGELOG.md records each bump and what
+moved. Determinism is unaffected: the same seed and `--as-of` still produce the same
+world, byte for byte.
 
 ## Branches
 
@@ -511,7 +555,7 @@ git checkout dev && git push                 # day to day
 git checkout main && git merge --ff-only dev && git push   # when it is ready
 ```
 
-CI runs on both: it boots the whole environment, runs the 89 self-checks, loads every
+CI runs on both: it boots the whole environment, runs the 97 self-checks, loads every
 Control Center surface, exercises the chaos proxy and real OAuth, and regenerates the
 world twice to prove determinism.
 
@@ -528,7 +572,9 @@ Set `VO_BIND=0.0.0.0` if you deliberately want LAN access, knowing what you are 
 
 ## Documents
 
-| | |
+The project page under `docs/` is the GitHub Pages site for this repository.
+
+| Document | What it covers |
 |---|---|
 | [DISCLAIMER.md](DISCLAIMER.md) | The world is fabricated. What that means for anything you compute from it. |
 | [SECURITY.md](SECURITY.md) | Why it ships credentials, why it binds loopback, how to report a problem. |

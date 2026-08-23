@@ -3,11 +3,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME="${1:-baseline}"
-DSN="${VO_DSN:-postgresql://vo@127.0.0.1:5433/world}"
+# The dev password, same one docker-compose.yml and SECURITY.md name. Without
+# it psql fails from the host: the container trusts loopback only from inside.
+DSN="${VO_DSN:-postgresql://vo:${POSTGRES_PASSWORD:-vo}@127.0.0.1:5433/world}"
 
 echo "==> schema"
 psql "$DSN" -q -f world/schema.sql
-echo "==> generate (seed=${VO_SEED:-48392} as_of=${VO_AS_OF:-2026-08-21} scale=${VO_SCALE:-1.0})"
+echo "==> generate (seed=${VO_SEED:-48392} as_of=${VO_AS_OF:-2026-08-21} scale=${VO_SCALE:-1.0} chaos=${VO_CHAOS:-1})"
 python3 world/generate.py --dsn "$DSN" --seed "${VO_SEED:-48392}" \
-        --as-of "${VO_AS_OF:-2026-08-21}" --scale "${VO_SCALE:-1.0}"
+        --as-of "${VO_AS_OF:-2026-08-21}" --scale "${VO_SCALE:-1.0}" \
+        --chaos "${VO_CHAOS:-1}"
 exec "$(dirname "$0")/snapshot" "$NAME"

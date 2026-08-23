@@ -4,12 +4,25 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+# The README tells you to set ports in .env, which only docker compose reads by
+# default. Read it here too, without overriding anything already exported.
+if [ -f .env ]; then
+  while IFS='=' read -r k v; do
+    case "$k" in ''|\#*) continue;; esac
+    v="${v%%[[:space:]]#*}"; v="${v%"${v##*[![:space:]]}"}"
+    eval "current=\${$k-}"
+    [ -n "$current" ] || export "$k=$v"
+  done < .env
+fi
+
 TOKEN="${VO_TOKEN:-vo-dev-token}"
 TWIN="${VO_BASE:-http://127.0.0.1:8080}"
-CC="${VO_CC_BASE:-http://127.0.0.1:3000}"
+CC="${VO_CC_BASE:-http://127.0.0.1:${VO_CC_PORT:-3000}}"
 KC="${VO_KEYCLOAK_BASE:-http://127.0.0.1:8081}"
 WM="${VO_WIREMOCK_BASE:-http://127.0.0.1:8090}"
-DSN="${VO_DSN:-postgresql://vo@127.0.0.1:5433/world}"
+# The dev password, same one docker-compose.yml and SECURITY.md name. Without
+# it psql fails from the host: the container trusts loopback only from inside.
+DSN="${VO_DSN:-postgresql://vo:${POSTGRES_PASSWORD:-vo}@127.0.0.1:5433/world}"
 fail=0
 
 row() { printf "  %-16s %-9s %s\n" "$1" "$2" "${3:-}"; }

@@ -7,6 +7,7 @@ Adversarial behaviour belongs in WireMock, in front of this. (DESIGN.md #2)
 """
 import base64
 import hashlib
+import re
 import hmac
 import os
 import secrets
@@ -178,10 +179,15 @@ SNOW = "/servicenow/api/now/table"
 def snow_table(table: str,
                sysparm_limit: int = Query(100, ge=1, le=1000),
                sysparm_offset: int = Query(0, ge=0),
-               sysparm_query: Optional[str] = None,
+               sysparm_query: Optional[str] = None,  # see the guard below
                x_vo_profile: Optional[str] = Header(None),
                authorization: Optional[str] = Header(None)):
     require_token(authorization)
+    if sysparm_query:
+        # Accepting a filter and ignoring it is the worst option: a connector doing
+        # incremental sync would silently re-ingest the whole table forever.
+        raise HTTPException(400, "sysparm_query is not implemented by this twin; "
+                                 "page with sysparm_limit and sysparm_offset instead")
     prof = profile_for("servicenow", x_vo_profile)
     spec = PROFILES["servicenow"][prof].get(table)
     if not spec:
@@ -259,7 +265,10 @@ def snow_table(table: str,
 
     elif table == "cmdb_sam_sw_install":
         vis = lenses.visible_ids("servicenow", "asset")
-        rows = db.q("""SELECT i.asset_id, s.name, s.publisher, s.version, s.eol_on,
+        # No end-of-life date here on purpose. Real SAM tables carry the installed
+        # package and version; knowing that version is past EOL is what the consuming
+        # product brings. 260 absence expectations turn on exactly that inference.
+        rows = db.q("""SELECT i.asset_id, s.name, s.publisher, s.version,
                               i.installed_on
                          FROM software_install i JOIN software s ON s.id = i.software_id
                          JOIN asset a ON a.id = i.asset_id
@@ -318,6 +327,17 @@ def snow_table(table: str,
 # ===================================================================== Splunk
 # Pattern: asynchronous search job. Submit -> poll -> fetch. (DESIGN.md #6)
 _JOBS: dict = {}
+JOB_TTL_SECONDS = 900
+
+
+def _expire_jobs():
+    """Jobs expire, as the 404 on an unknown sid always told connectors they would.
+    Called wherever a job is created or looked up: sweeping only on submit made the
+    resubmit path depend on whether anyone else happened to be submitting."""
+    now = dt.datetime.now(dt.timezone.utc)
+    for sid in [k for k, v in _JOBS.items()
+                if (now - v["created"]).total_seconds() > JOB_TTL_SECONDS]:
+        _JOBS.pop(sid, None)
 SPL = "/splunk/services/search/jobs"
 
 
@@ -328,14 +348,20 @@ async def splunk_create_job(request: Request, authorization: Optional[str] = Hea
     search = (form.get("search") or "").strip()
     if not search:
         raise HTTPException(400, "search is required")
+    # Validate the search now. Accepting it and failing on the first poll leaves the
+    # caller holding a job id that can never complete.
+    _rule_filter(search)
     sid = uuid.uuid4().hex[:16]
-    _JOBS[sid] = {"search": search, "polls": 0, "created": dt.datetime.now(dt.timezone.utc)}
+    _expire_jobs()
+    _JOBS[sid] = {"search": search, "polls": 0,
+                  "created": dt.datetime.now(dt.timezone.utc)}
     return JSONResponse({"sid": sid}, status_code=201)
 
 
 @app.get(SPL + "/{sid}")
 def splunk_job_status(sid: str, authorization: Optional[str] = Header(None)):
     require_token(authorization)
+    _expire_jobs()
     job = _JOBS.get(sid)
     if not job:
         raise HTTPException(404, "unknown sid")           # expired job -> connector must resubmit
@@ -348,8 +374,29 @@ def splunk_job_status(sid: str, authorization: Optional[str] = Header(None)):
 
 
 def _rule_filter(search: str):
-    if "rule=" in search:
-        return search.split("rule=", 1)[1].split()[0].strip('"')
+    """Extract a `rule=` term, and only a real one.
+
+    An unanchored substring test matched `NOT rule=X` and `correlation_rule=X` alike,
+    so a search asking to EXCLUDE a rule was handed exactly the rows it excluded, with
+    a corroborating resultCount. A trailing bare `rule=` also raised IndexError.
+    """
+    # Negation is checked BEFORE extraction, not after. Checking it afterwards meant
+    # `!rule=X` and `rule!=X` never reached the check at all: neither matches the
+    # extractor, so the function returned None and the search ran unfiltered, handing
+    # back precisely the rows the caller asked to exclude.
+    if re.search(r'(?:^|\s)(?:NOT\s+|!\s*)rule\s*=|(?:^|\s)rule\s*!=', search, re.IGNORECASE):
+        raise HTTPException(400, "negated rule filters are not supported by this twin")
+
+    m = re.search(r'(?:^|\s)rule=("?)([A-Za-z0-9_.:-]+)\1(?=\s|$)', search)
+    if m:
+        return m.group(2)
+
+    # A filter this twin does not implement must not be silently dropped. Returning
+    # every row with a corroborating resultCount is worse than refusing: the caller
+    # cannot tell the difference between "no matches excluded" and "filter ignored".
+    if re.search(r'\brule(?:_\w+)?\s*[=<>!~]', search, re.IGNORECASE) or \
+       re.search(r'\b\w+_rule\s*[=<>!~]', search, re.IGNORECASE):
+        raise HTTPException(400, "the only supported filter is `rule=<id>`")
     return None
 
 
@@ -371,6 +418,7 @@ def _count(job):
 def splunk_job_results(sid: str, offset: int = Query(0, ge=0), count: int = Query(100, ge=1, le=5000),
                        authorization: Optional[str] = Header(None)):
     require_token(authorization)
+    _expire_jobs()
     job = _JOBS.get(sid)
     if not job:
         raise HTTPException(404, "unknown sid")
@@ -424,7 +472,8 @@ def hr_workers(page: int = Query(1, ge=1), per_page: int = Query(100, ge=1, le=1
         rows = [r for r in rows if (r["ended_on"] is None) == active]
     total = len(rows)
     pages = max(1, -(-total // per_page))
-    page = max(1, min(page, pages))
+    # Past the end returns an empty page. Clamping upward meant a fetch-until-empty
+    # loop never terminated, re-reading the final page forever.
     start = (page - 1) * per_page
     out = []
     for r in rows[start:start + per_page]:
@@ -452,9 +501,17 @@ def hr_workers(page: int = Query(1, ge=1), per_page: int = Query(100, ge=1, le=1
 EDR = "/edr/devices"
 
 
+def _edr_agent_version(procured_on):
+    """An estate patches in waves, so the fleet carries a spread of builds rather than
+    one. Keyed off the year the machine arrived, which is a fact the world holds."""
+    return {2021: "7.10.15802.0", 2022: "7.11.16110.0", 2023: "7.13.17204.0",
+            2024: "7.14.17806.0", 2025: "7.16.18604.0"}.get(procured_on.year, "7.17.19003.0")
+
+
 def _edr_rows():
     vis = lenses.visible_ids("edr", "asset")
-    rows = db.q("""SELECT a.id, a.hostname, a.os_family, a.os_version, a.kind
+    rows = db.q("""SELECT a.id, a.hostname, a.os_family, a.os_version, a.kind,
+                          a.procured_on
                      FROM asset a WHERE a.decommissioned_on IS NULL ORDER BY a.id""")
     return [(r, vis[r["id"]]) for r in rows if r["id"] in vis]
 
@@ -500,8 +557,13 @@ async def edr_hydrate(request: Request, authorization: Optional[str] = Header(No
             "hostname": r["hostname"],                   # <- and also carries the short name
             "platform_name": r["os_family"],
             "os_version": r["os_version"],
-            "agent_version": "7.16.18604.0",
-            "first_seen": iso(now - dt.timedelta(days=400)),
+            # Both derived from the world rather than pinned. A single constant made
+            # every device report the same agent build, and a fixed 400-day offset put
+            # 28 agents on machines before the company had bought them.
+            "agent_version": _edr_agent_version(r["procured_on"]),
+            "first_seen": iso(max(
+                dt.datetime.combine(r["procured_on"], dt.time(9, 0), tzinfo=dt.timezone.utc),
+                now - dt.timedelta(days=400))),
             "last_seen": iso(v["last_seen"]),
             "status": "silent" if silent_days >= 7 else "normal",
         })
@@ -558,10 +620,15 @@ def iam_users(limit: int = Query(200, ge=1, le=1000), after: Optional[str] = Non
     require_token(authorization)
     rows = _iam_rows()
     users = [_iam_user(r, v) for r, v in rows]
-    if filter:                                        # Okta-style: status eq "ACTIVE"
-        want = filter.split("eq", 1)[-1].strip().strip('"') if "eq" in filter else None
-        if want:
-            users = [u for u in users if u["status"] == want]
+    if filter:
+        # Only the one form this twin actually implements. Anything else used to fall
+        # through and return every user, so an access review asking for active accounts
+        # was handed every deprovisioned one as a 200.
+        m = re.fullmatch(r'\s*status\s+eq\s+"([A-Z_]+)"\s*', filter)
+        if not m:
+            raise HTTPException(400,
+                                'this twin supports only filter=status eq "VALUE"')
+        users = [u for u in users if u["status"] == m.group(1)]
     start = _decode(after)
     page = users[start:start + limit]
     headers = {"X-Total-Count": str(len(users))}
@@ -833,7 +900,7 @@ def grc_assets(cursor: Optional[str] = None, limit: int = Query(200, ge=1, le=10
     """The third identifier style. GRC calls the same machine by its asset tag.
 
     NOTE: lens.blind_spot for this lens reads "anything without a control owner",
-    but the generator grants it coverage 1.00 over every asset. This endpoint is
+    but the generator grants it coverage 0.91, so part of the estate is missing. This endpoint is
     faithful to lens_visibility as generated, not to the blind_spot string. See
     README "Known gaps".
     """
@@ -986,17 +1053,59 @@ def _download_token(attachment_id: str) -> str:
                     hashlib.sha256).hexdigest()[:32]
 
 
+# Attachment bodies are deterministic, so their digests are too. Both the metadata
+# route and the content route go through here: an advertised checksum that the
+# downloaded bytes fail is misbehaviour, and these twins are always well behaved.
+_ATT_DIGEST: dict = {}
+
+
+def _attachment_body(row) -> bytes:
+    header = {
+        "text/plain": b"EVIDENCE MEMO\nfinding: ", "text/csv": b"user,system,reviewed_on\n",
+        "application/pdf": b"%PDF-1.4\n% synthetic evidence\n",
+        "image/png": b"\x89PNG\r\n\x1a\n",
+    }.get(row["media_type"], b"")
+    if row["media_type"].startswith("text/"):
+        # Text media types get real text: ASCII, and broken into lines. Raw digest
+        # bytes made `resp.text` raise UnicodeDecodeError, and a single unbroken line
+        # made `csv.reader` blow past its field limit. A twin whose contract is that
+        # it never misbehaves should not hand back bytes its own Content-Type lies
+        # about. The size and the digest are unaffected: both derive from these bytes.
+        h = hashlib.sha256(row["content_seed"].encode()).hexdigest()
+        if row["media_type"] == "text/csv":
+            unit = f"{h[:8]}@acme.example,{h[8:16]},2026-0{1 + int(h[16], 16) % 9}-15\n"
+        else:
+            unit = h + "\n"
+        filler = unit.encode()
+    else:
+        filler = hashlib.sha256(row["content_seed"].encode()).digest()
+    # Exactly size_bytes, always: the advertised length and the digest both describe
+    # these bytes. A text body may therefore end on a partial line, which is what a
+    # truncated export looks like and which csv.reader handles without complaint.
+    return (header + (filler * (row["size_bytes"] // len(filler) + 1)))[:row["size_bytes"]]
+
+
+def _attachment_sha256(row) -> str:
+    # Keyed on everything the body derives from, not just the id. `scripts/reset`
+    # swaps the world underneath a running gateway, and an id-keyed cache would then
+    # advertise the previous world's digest for the current world's bytes.
+    key = (row["id"], row["content_seed"], row["media_type"], row["size_bytes"])
+    if key not in _ATT_DIGEST:
+        _ATT_DIGEST[key] = hashlib.sha256(_attachment_body(row)).hexdigest()
+    return _ATT_DIGEST[key]
+
+
 @app.get(GRC + "/findings/{finding_id}/attachments")
 def grc_attachments(finding_id: str, authorization: Optional[str] = Header(None)):
     require_token(authorization)
-    rows = db.q("""SELECT id, filename, media_type, size_bytes, uploaded_on, sha256
+    rows = db.q("""SELECT id, filename, media_type, size_bytes, uploaded_on, content_seed
                      FROM attachment WHERE finding_id = %s ORDER BY id""", (finding_id,))
     if not db.one("SELECT 1 AS x FROM finding WHERE id = %s", (finding_id,)):
         raise HTTPException(404, "no such finding")
     return {"attachments": [{
         "id": r["id"], "filename": r["filename"], "media_type": r["media_type"],
         "size_bytes": r["size_bytes"], "uploaded_on": iso(r["uploaded_on"]),
-        "sha256": r["sha256"],
+        "sha256": _attachment_sha256(r),
         "too_large_to_download": r["size_bytes"] > MAX_DOWNLOAD_BYTES,
         "content_url": f"{GRC}/attachments/{r['id']}/content",
         "download_token": _download_token(r["id"]),
@@ -1009,7 +1118,7 @@ def grc_attachment_content(attachment_id: str, token: Optional[str] = None,
     """Bytes, with the three things a connector must handle: a separate credential,
     a hard size limit, and a real Content-Type it did not choose."""
     require_token(authorization)
-    a = db.one("""SELECT id, filename, media_type, size_bytes, sha256
+    a = db.one("""SELECT id, filename, media_type, size_bytes, content_seed
                     FROM attachment WHERE id = %s""", (attachment_id,))
     if not a:
         raise HTTPException(404, "no such attachment")
@@ -1020,17 +1129,11 @@ def grc_attachment_content(attachment_id: str, token: Optional[str] = None,
         raise HTTPException(413, f"attachment is {a['size_bytes']} bytes; the download "
                                  f"limit is {MAX_DOWNLOAD_BYTES}")
     # Deterministic bytes: same attachment, same content, every run.
-    header = {
-        "text/plain": b"EVIDENCE MEMO\nfinding: ", "text/csv": b"user,system,reviewed_on\n",
-        "application/pdf": b"%PDF-1.4\n% synthetic evidence\n",
-        "image/png": b"\x89PNG\r\n\x1a\n",
-    }.get(a["media_type"], b"")
-    filler = hashlib.sha256(a["sha256"].encode()).digest()
-    body = (header + (filler * (a["size_bytes"] // len(filler) + 1)))[:a["size_bytes"]]
+    body = _attachment_body(a)
     return Response(content=body, media_type=a["media_type"], headers={
         "Content-Length": str(a["size_bytes"]),
         "Content-Disposition": f'attachment; filename="{a["filename"]}"',
-        "X-Content-SHA256": a["sha256"],
+        "X-Content-SHA256": _attachment_sha256(a),
     })
 
 

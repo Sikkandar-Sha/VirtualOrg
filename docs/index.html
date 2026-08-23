@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VirtualOrg: a synthetic enterprise for testing risk-posture products</title>
-<meta name="description" content="Model an enterprise once, truthfully. Make every vendor tool a lossy lens over it. Ship with 1,217 ground-truth assertions saying what your product should conclude, and what it should refuse to conclude.">
+<meta name="description" content="Model an enterprise once, truthfully. Make every vendor tool a lossy lens over it. Ship with 1,263 ground-truth assertions saying what your product should conclude, and what it should refuse to conclude.">
 <meta property="og:title" content="VirtualOrg">
 <meta property="og:description" content="A synthetic enterprise for testing risk-posture products, with the answer key included.">
 <meta property="og:type" content="website">
@@ -176,7 +176,7 @@ footer a{color:var(--ink-2)}
         <text x="96" y="229" class="s" text-anchor="middle">complete · true</text>
         <text x="96" y="288" class="s" text-anchor="middle">40 tables · 38,000 rows</text>
         <text x="96" y="304" class="s" text-anchor="middle">3 years of history</text>
-        <text x="96" y="320" class="s" text-anchor="middle">1,217 assertions</text>
+        <text x="96" y="320" class="s" text-anchor="middle">1,263 assertions</text>
 
         <polygon points="248,187 300,215 248,243" fill="url(#h)" stroke="var(--rule-2)" stroke-width="1.2"/>
         <text x="270" y="219" class="s" text-anchor="middle">lens</text>
@@ -235,11 +235,11 @@ footer a{color:var(--ink-2)}
     <div class="eyebrow">What you get</div>
     <h2>Ground truth, not just data</h2>
     <div class="stats">
-      <div><div class="n">1,217</div><div class="k">assertions</div></div>
-      <div><div class="n">5,023</div><div class="k">evidence links</div></div>
-      <div><div class="n">773</div><div class="k">decoys</div></div>
+      <div><div class="n">1,263</div><div class="k">assertions</div></div>
+      <div><div class="n">4,983</div><div class="k">evidence links</div></div>
+      <div><div class="n">747</div><div class="k">decoys</div></div>
       <div><div class="n">7</div><div class="k">lenses</div></div>
-      <div><div class="n">~7s</div><div class="k">cold boot</div></div>
+      <div><div class="n">~10s</div><div class="k">cold boot</div></div>
     </div>
     <p style="margin-top:26px"><code>world.expectation</code> says what your product
       <strong>should conclude</strong>, and what it should <strong>refuse</strong> to
@@ -247,15 +247,15 @@ footer a{color:var(--ink-2)}
     <div class="fam">
       <div><h3>Attribution</h3><p>Is this event genuine evidence for this control? Nothing
         in any vendor API links a detection to a control. That inference is your product's
-        core job.</p><span class="n">5,023 links · 773 decoys</span></div>
+        core job.</p><span class="n">4,983 links · 747 decoys</span></div>
       <div><h3>Conflict</h3><p>Sources disagree. Resolve it with a defensible rule or
         surface it. Either is valid; silently picking a winner is not.</p>
-        <span class="n">129 planted</span></div>
+        <span class="n">118 planted</span></div>
       <div><h3>Degradation</h3><p>A source is stale or down. Does posture announce the gap,
-        or serve last week's numbers as current?</p><span class="n">12 + a chaos proxy</span></div>
+        or serve last week's numbers as current?</p><span class="n">32 planted</span></div>
       <div><h3>Absence</h3><p>Controls with no evidence, policies nothing implements,
         machines nobody watches. For an SSOT, silence must be distinguishable from
-        health.</p><span class="n">303 planted</span></div>
+        health.</p><span class="n">366 planted</span></div>
     </div>
   </div>
 </section>
@@ -274,10 +274,10 @@ footer a{color:var(--ink-2)}
         so you can tell the difference</td></tr>
       <tr><td>Guarding against regressions</td><td>A deterministic world and a
         sub-second restore, so any posture delta is a real finding</td></tr>
-      <tr><td>Proving deployability</td><td>Three customer schema profiles per vendor.
+      <tr><td>Proving deployability</td><td>Three customer schema profiles on the ServiceNow lens.
         Passing all three means the connector ships; passing only
         <code>out-of-the-box</code> means it demos</td></tr>
-      <tr><td>Demoing</td><td>“Here are the 52 machines with no endpoint agent, and the
+      <tr><td>Demoing</td><td>“Here are the 55 machines with no endpoint agent, and the
         7 control exceptions that expired months ago. A GRC platform will never tell
         you that.”</td></tr>
     </table></div>
@@ -287,7 +287,7 @@ footer a{color:var(--ink-2)}
 <section id="start">
   <div class="wrap">
     <div class="eyebrow">Quick start</div>
-    <h2>Seven seconds from clone to a running enterprise</h2>
+    <h2>Ten seconds from clone to a running enterprise</h2>
 <pre><code>git clone https://github.com/Sikkandar-Sha/VirtualOrg.git &amp;&amp; cd VirtualOrg
 cp .env.example .env
 docker compose up -d          # world, seven twins, Keycloak, Control Center
@@ -296,7 +296,7 @@ open http://localhost:3000    # the Control Center</code></pre>
     <p style="margin-top:22px">Point your product at
       <code>config/virtualorg/connectors.yaml</code>. The whole environment switch is a
       config file, never a patched build. Then run
-      <code>python3 scripts/verify.py</code>: 89 self-checks that prove the conditions
+      <code>python3 scripts/verify.py</code>: 97 self-checks that prove the conditions
       the ground truth claims exist are genuinely observable through the vendor APIs.</p>
   </div>
 </section>

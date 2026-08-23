@@ -13,8 +13,27 @@ never hardcoded.
 
 This checks VirtualOrg, not the kit.
 """
-import os, sys, datetime as dt
+import os, re, sys, datetime as dt
 import httpx, yaml
+
+
+def _dotenv(name, default=""):
+    """The README tells you to set ports in .env; only docker compose reads it by
+    default. An exported variable still wins. Without this, `python3 scripts/verify.py`
+    as the README prints it fails on a machine whose Control Center is not on :3000."""
+    if os.environ.get(name):
+        return os.environ[name]
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")) as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith(name + "="):
+                    return line.split("=", 1)[1].split("#")[0].strip() or default
+    except OSError:
+        pass
+    return default
+
+
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -463,10 +482,19 @@ grp = c.get("/iam/api/v1/groups").json()
 check("the directory publishes groups, including privileged ones",
       grp and any(g["profile"]["description"] == "privileged" for g in grp),
       f"{len(grp)} groups")
-someone = next((u["profile"]["login"] for u in allu), None)
-gm = c.get(f"/iam/api/v1/users/{someone}/groups").json()
+# isinstance(x, list) is true of the empty list, and the first user in the directory
+# happens to have no memberships, so the old form of this check certified nothing and
+# never once looked at a revocation date. Find a user who actually has memberships.
+someone, gm = None, []
+for _u in allu:
+    _login = _u["profile"]["login"]
+    _r = c.get(f"/iam/api/v1/users/{_login}/groups").json()
+    if _r:
+        someone, gm = _login, _r
+        break
 check("group membership is retrievable per user, with revocation dates",
-      isinstance(gm, list), f"{len(gm)} memberships for {someone}")
+      bool(gm) and all("revoked" in _m for _m in gm),
+      f"{len(gm)} memberships for {someone}, each carrying a revocation field")
 
 # ---- 4d. provenance: is any of this evidence? (DESIGN.md #5)
 print("\nProvenance")
@@ -502,7 +530,14 @@ except Exception:
     _cfg = None
 
 if _cfg is None:
-    print("        (docker compose unavailable; boundary not checked)")
+    # Skipping is acceptable on a workstation without the Docker CLI. In CI it is not:
+    # this is the only check standing behind SECURITY.md's binding claim, and a silent
+    # skip there would let the claim go unverified while the run still reported green.
+    if os.environ.get("CI"):
+        check("the network boundary could be checked", False,
+              "docker compose config failed; SECURITY.md's binding claim is unverified")
+    else:
+        print("        (docker compose unavailable; boundary not checked)")
 else:
     _wide, _n = [], 0
     for _name, _svc in (_cfg.get("services") or {}).items():
@@ -644,6 +679,70 @@ cutoff = (dt.datetime.fromisoformat(h["world"]["as_of"]) - dt.timedelta(days=len
 lossy("Splunk retains only its retention window",
       dt.datetime.fromisoformat(oldest).replace(tzinfo=None) >= cutoff - dt.timedelta(days=1),
       f"oldest={oldest[:10]}, retention={lens['retention_days']}d")
+
+# ---- 7. authored prose, checked against the world it describes
+#
+# Every other section here asserts the world against the APIs. This one asserts the
+# hand-written sentences against both, because that is where this project has actually
+# drifted: a page said "no lens knows that" about a leaver Workday reports, and another
+# said a hostname appears in no API while the scanner returned it on page one. Generated
+# numbers stay honest on their own. Authored claims only stay honest if something checks.
+print("\nAuthored claims")
+
+_cc = _dotenv("VO_CC_BASE") or f"http://127.0.0.1:{_dotenv('VO_CC_PORT', '3000')}"
+
+
+def _page(path):
+    try:
+        return httpx.get(_cc + path, timeout=30).text
+    except Exception:
+        return ""
+
+
+def _text(path):
+    return " ".join(re.sub(r"<[^>]*>", " ", _page(path)).split())
+
+
+# The manual claims the short hostname is not recoverable from ServiceNow. It must
+# still be findable somewhere, or the correlation chapter is teaching a dead end.
+_scan = c.get("/scanner/api/v3/assets", params={"limit": 5}).json().get("assets", [])
+check("the short hostname the manual points at is really on the scanner lens",
+      any(re.fullmatch(r"[A-Z]{2,3}-\d+", a.get("hostname") or "") for a in _scan),
+      f"e.g. {_scan[0].get('hostname') if _scan else 'none'}")
+
+# The asset page distinguishes employees from contractors when an owner has left.
+# Workday is a lens, and it reports employee terminations.
+_hr = c.get("/hr/api/v1/workers", params={"per_page": 200}).json().get("workers", [])
+check("HR really does report terminations, so 'no lens knows' is false for employees",
+      any(w.get("termination_date") for w in _hr),
+      f"{sum(1 for w in _hr if w.get('termination_date'))} of {len(_hr)} on page one carry one")
+
+# Every chapter the manual links to must exist. A silent fallback to Overview hid
+# renamed chapters from CI and from readers alike.
+_chs = sorted(set(re.findall(r'href="/manual\?ch=([a-z_]+)"', _page("/manual"))))
+_bad_ch = [ch for ch in _chs if httpx.get(f"{_cc}/manual?ch={ch}", timeout=30).status_code != 200]
+check("every chapter the manual links to resolves", _chs and not _bad_ch,
+      f"{len(_chs)} chapters, broken: {_bad_ch or 'none'}")
+check("an unknown chapter is refused rather than silently shown as Overview",
+      httpx.get(f"{_cc}/manual?ch=definitely-not-a-chapter", timeout=30).status_code == 404,
+      "404")
+
+# A lens page must describe the entity it actually serves.
+for _lid, _want in (("iam", "person"), ("hr", "person"), ("servicenow", "asset")):
+    _t = _text(f"/lenses/{_lid}")
+    check(f"the {_lid} lens page names the entity it serves",
+          f"Calls every {_want}" in _t, f"expected 'Calls every {_want}'")
+
+# No lens may advertise retaining data from before the world began.
+_hs = h["world"].get("history_start")
+if _hs:
+    _floors = []
+    for _lid in ("iam", "hr", "grc", "servicenow", "splunk", "scanner", "edr"):
+        _m = re.search(r"Oldest it retains (\d{4}-\d{2}-\d{2})", _text(f"/lenses/{_lid}"))
+        if _m and _m.group(1) < _hs:
+            _floors.append(f"{_lid}={_m.group(1)}")
+    check("no lens page claims retention from before the world started",
+          not _floors, f"world starts {_hs}; offenders: {_floors or 'none'}")
 
 print()
 if fails:

@@ -2,7 +2,7 @@
 {% block body %}
 <div class="crumb"><a href="/lenses">Surface 3 · the lenses</a></div>
 <h1>{{ l.vendor }}</h1>
-<p class="lede">{{ l.category }} lens. Calls every asset by its <b>{{ l.identifier_style }}</b>,
+<p class="lede">{{ l.category }} lens. Calls every {{ l.subject or 'entity' }} by its <b>{{ l.identifier_style }}</b>,
   sees {{ (l.coverage * 100) | round | int }}% of them, and is structurally blind to
   {{ l.blind_spot }}.</p>
 
@@ -12,7 +12,7 @@
   <div><div class="k">Newest it can see</div><div class="v">{{ horizon.strftime('%Y-%m-%d %H:%M') }}
     <small>−{{ l.latency_minutes }}m</small></div></div>
   <div><div class="k">Oldest it retains</div><div class="v">{{ floor.strftime('%Y-%m-%d') }}
-    <small>−{{ l.retention_days }}d</small></div></div>
+    <small>{% if capped %}world starts here{% else %}−{{ l.retention_days }}d{% endif %}</small></div></div>
   <div><div class="k">Entities</div><div class="v">{{ counts | sum(attribute='n') }}</div></div>
 </div>
 

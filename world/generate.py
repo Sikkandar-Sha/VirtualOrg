@@ -167,6 +167,12 @@ class Gen:
                                    tzinfo=dt.timezone.utc)
 
 # --------------------------------------------------------------------------- build
+# Splunk's retention and sync latency. Named once: the evidence sampler and the
+# lens row must agree, or the labelled corpus stops matching what the API returns.
+SPLUNK_RETENTION_DAYS = 90
+SPLUNK_LATENCY_MIN = 5
+
+
 def build(g: argparse.Namespace, gen: Gen):
     r, today, start = gen.r, gen.today, gen.start
     chaos = getattr(g, "chaos", 1)
@@ -227,7 +233,15 @@ def build(g: argparse.Namespace, gen: Gen):
         host = f"{'LT' if kind=='endpoint' else ('SRV' if kind=='server' else 'CLD')}-{4000+i}"
         procured = gen.day(start - dt.timedelta(days=365 * 4), today - dt.timedelta(days=30))
         decom = gen.day(procured + dt.timedelta(days=200), today) if r.random() < 0.10 else None
-        owner = gen.pick(people)["id"] if kind == "endpoint" else None
+        # Only someone actually employed on the day the machine arrived. Picking
+        # uniformly handed 13 laptops to people who had already left, which is not a
+        # planted conflict, just an incoherent history.
+        if kind == "endpoint":
+            eligible = [q for q in people
+                        if q["started"] <= procured and (q["ended"] is None or q["ended"] >= procured)]
+            owner = gen.pick(eligible if eligible else people)["id"]
+        else:
+            owner = None
         crit = "critical" if kind != "endpoint" and r.random() < 0.25 else gen.pick(["low","medium","high"])
         assets.append({"id": aid, "host": host, "fqdn": f"{host.lower()}.corp.local",
                        "tag": f"AT-{900000+i}", "ip": gen.pick(pool), "kind": kind,
@@ -395,6 +409,8 @@ def build(g: argparse.Namespace, gen: Gen):
             atts.append((aid, f["id"], f"{kind}-{f['id']}.{ext}", media, size,
                          f["raised"] + dt.timedelta(days=r4.randint(0, 20)),
                          hashlib.sha256(aid.encode()).hexdigest()))
+            # that last value seeds the body; the twin advertises the digest of the
+            # bytes it actually serves, so the checksum a connector checks holds
     gen.put("attachment", atts)
 
     # ---- risks
@@ -444,6 +460,10 @@ def build(g: argparse.Namespace, gen: Gen):
         s = gen.pick(services)
         opened = gen.ts()
         closed = opened + dt.timedelta(hours=r.randint(2, 200))
+        # The world has a fixed now. An incident that closes after it makes every
+        # age and MTTR calculation over this feed wrong.
+        if closed.date() > today:
+            closed = None
         sev = r.randint(1, 4)
         impact = "no customer impact" if r.random() < 0.45 else "customer impacting"
         inc = (f"INC-{i:04d}", f"INC-{opened.year}-{i:04d}",
@@ -499,7 +519,29 @@ def build(g: argparse.Namespace, gen: Gen):
     # whether a system will assert a link it cannot support, which is the failure
     # that matters. Making decoys same-theme would make them more tempting but
     # also unlearnable, since the world models no signal that would separate them.
-    sample = r.sample(alerts, min(len(alerts), int(4000 * gen.scale)))
+    # Draw the labelled sample from alerts the SIEM can still return, first.
+    #
+    # Labelling uniformly across three years of history looked reasonable and was
+    # not: Splunk retains 90 days and covers 83% of the estate, so only a few
+    # hundred of the labelled links pointed at a record any connector could fetch.
+    # The trap corpus had the same problem, which made the headline trap count
+    # describe planting rather than anything a kit could ever encounter.
+    #
+    # The sample SIZE is unchanged, so the totals this world advertises are the
+    # same; only which alerts carry a label moves. Out-of-window alerts still take
+    # the remainder, because a world where every labelled link is retrievable would
+    # stop teaching that the world knows more than the lens does.
+    n_sample = min(len(alerts), int(4000 * gen.scale))
+    # Its own stream, so ordering the sample cannot shift any later draw.
+    r6 = random.Random(g.seed ^ 0x51E4)
+    _now = dt.datetime.combine(today, dt.time(9, 0), tzinfo=dt.timezone.utc)
+    _hz = _now - dt.timedelta(minutes=SPLUNK_LATENCY_MIN)
+    _fl = _now - dt.timedelta(days=SPLUNK_RETENTION_DAYS)
+    in_window = sorted([a for a in alerts if _fl <= a[5] <= _hz], key=lambda a: a[0])
+    out_window = sorted([a for a in alerts if not (_fl <= a[5] <= _hz)], key=lambda a: a[0])
+    r6.shuffle(in_window)
+    r6.shuffle(out_window)
+    sample = (in_window + out_window)[:n_sample]
     for al in sample:
         tag = rule_tag[al[1]]
         pool_c = theme_controls.get(tag) or evidenceable
@@ -534,10 +576,11 @@ def build(g: argparse.Namespace, gen: Gen):
     # The world is always true; only what the lenses do to it changes.
     #
     #   0  pristine      one identifier scheme, complete coverage, no staleness
-    #   1  realistic     recycled IPs, four naming schemes, gaps, stale rows
+    #   1  realistic     recycled IPs, five naming schemes, gaps, stale rows
     #   2  pathological  level 1 plus collisions, homoglyphs, whitespace, case drift
     base_lenses = [
-        ("splunk",     "Splunk",     "siem",   0.83, 5,    "ip",        90,
+        ("splunk",     "Splunk",     "siem",   0.83, SPLUNK_LATENCY_MIN, "ip",
+         SPLUNK_RETENTION_DAYS,
          "assets with no forwarder installed"),
         ("servicenow", "ServiceNow", "itsm",   0.97, 1440, "fqdn",      3650,
          "assets procured outside IT"),
@@ -702,7 +745,7 @@ def build(g: argparse.Namespace, gen: Gen):
         n_exp += 1
         exp.append((f"EXP-{n_exp:05d}", family, kind, sid, claim, Json(detail)))
 
-    for a in unseen_by_security[:200]:
+    for a in unseen_by_security:
         add("absence", "asset", a["id"],
             "asset is live and in ITSM but invisible to every security lens",
             {"hostname": a["host"], "criticality": a["crit"]})
@@ -723,7 +766,7 @@ def build(g: argparse.Namespace, gen: Gen):
             add("absence", "person", p["id"],
                 "leaver is a contractor, so no HR record confirms the termination",
                 {"left_on": p["ended"].isoformat(), "employment": p["employment"]})
-    for a in scanned_not_monitored[:200]:
+    for a in scanned_not_monitored:
         add("absence", "asset", a["id"],
             "asset is scanned for vulnerabilities but monitored by no SIEM",
             {"hostname": a["host"], "criticality": a["crit"]})
@@ -899,7 +942,10 @@ def build(g: argparse.Namespace, gen: Gen):
             {"group": gp["name"], "left_on": p_["ended"].isoformat()})
     eol_ids = {x["id"] for x in sw if x["eol"]}
     eol_assets = sorted({aid for aid, sid, _ in inst if sid in eol_ids})
-    for aid in eol_assets[:200]:
+    # No cap. Capping the catalogue while the world keeps generating the condition
+    # charges a correct kit a false positive for every asset past the cut, which
+    # punishes it for being right and gets worse as scale rises.
+    for aid in eol_assets:
         add("absence", "asset", aid,
             "asset runs software that is past its end-of-life date",
             {"packages": sorted({x["name"] for x in sw
@@ -911,7 +957,7 @@ def build(g: argparse.Namespace, gen: Gen):
         ("seed", str(g.seed)), ("as_of", today.isoformat()),
         ("history_start", start.isoformat()), ("scale", str(gen.scale)),
         ("chaos", str(chaos)), ("mangled_identifiers", str(mangled)),
-        ("generator_version", "3"),
+        ("generator_version", "5"),
     ])
 
 # --------------------------------------------------------------------------- load
@@ -927,7 +973,11 @@ ORDER = ["department","person","account","asset","application","business_service
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dsn", default="postgresql://vo@127.0.0.1:5433/world")
+    ap.add_argument("--dsn",
+                    # The dev password, as docker-compose.yml and SECURITY.md name it.
+                    # Without it the documented reproducibility command fails on auth:
+                    # the container trusts loopback only from inside itself.
+                    default="postgresql://vo:vo@127.0.0.1:5433/world")
     ap.add_argument("--seed", type=int, default=48392)
     ap.add_argument("--as-of", default="2026-08-21")
     ap.add_argument("--scale", type=float, default=1.0)

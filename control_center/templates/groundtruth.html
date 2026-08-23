@@ -14,6 +14,18 @@
   {% endfor %}
 </table></div>
 
+<h2>Rows and subjects</h2>
+<p class="note">A kit emits one finding per subject, so <code>scripts/score</code>
+  measures against distinct subjects. The catalogue holds rows, and one subject can
+  carry several. Both are shown so the two never appear to disagree.</p>
+<div class="wrap"><table>
+  <tr><th>Family</th><th class="num">Rows</th><th class="num">Distinct subjects</th></tr>
+  {% for r in subject_counts %}
+  <tr><td>{{ r.family }}</td><td class="num">{{ "{:,}".format(r.rows) }}</td>
+      <td class="num">{{ "{:,}".format(r.subjects) }}</td></tr>
+  {% endfor %}
+</table></div>
+
 <p class="note" style="margin-top:14px">Attribution scoring corpus:
   <b>{{ "{:,}".format(corpus.true_links) }}</b> true evidence links, <b>{{ "{:,}".format(corpus.traps) }}</b> deliberate
   traps, across {{ corpus.controls_with_evidence }} controls.</p>

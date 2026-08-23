@@ -1,7 +1,8 @@
 # VirtualOrg, the whole synthetic enterprise.
 #
 #   docker compose up -d              VirtualOrg only; run your kit from your IDE
-#   docker compose --profile ci up -d adds the kit under test (CI)
+#   the ci profile below is a commented-out template: uncomment it to run your
+#   own kit inside the compose network (see examples/reference-kit/)
 #   docker compose --profile chaos up -d  puts WireMock in front of a twin
 #
 # The kit is deliberately NOT a default service: developers need a debugger

@@ -4,8 +4,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME="${1:-baseline}"
-DSN="${VO_DSN:-postgresql://vo@127.0.0.1:5433/world}"
+# The dev password, same one docker-compose.yml and SECURITY.md name. Without
+# it psql fails from the host: the container trusts loopback only from inside.
+DSN="${VO_DSN:-postgresql://vo:${POSTGRES_PASSWORD:-vo}@127.0.0.1:5433/world}"
 [ -f "seeds/${NAME}.dump" ] || { echo "no such baseline: seeds/${NAME}.dump"; exit 1; }
+# Prove the archive is readable BEFORE dropping anything. Checking only that the file
+# exists meant a truncated or corrupt dump destroyed the world with nothing to restore.
+if ! pg_restore --list "seeds/${NAME}.dump" >/dev/null 2>&1; then
+  echo "seeds/${NAME}.dump is not a readable pg_dump archive; refusing to drop the world" >&2
+  exit 1
+fi
 psql "$DSN" -q -c "DROP SCHEMA IF EXISTS world CASCADE"
 pg_restore -d "$DSN" --no-owner "seeds/${NAME}.dump"
 echo "==> restored ${NAME}"

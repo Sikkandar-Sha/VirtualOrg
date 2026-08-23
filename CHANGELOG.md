@@ -6,15 +6,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Ver
 is described under [The world contract](#the-world-contract) below, which matters more
 here than ordinary semver because the artefact is a generated world.
 
-## [Unreleased]
+## Unreleased
+
+### Changed
+- **`generator_version` is now `5`. Golden files from version 4 and earlier must be rebaselined.**
+  The world contract below requires this to be called out, so here it is in full:
+  - `attachment.sha256` is now `attachment.content_seed`. The digest the GRC API
+    advertises is computed from the bytes it serves, so a connector that verifies a
+    checksum now succeeds. Previously none could.
+  - Expectation counts changed. The catalogue was capped at 200 end-of-life assets
+    while the world generated 260, which charged a correct kit a false positive for
+    every asset past the cut. The caps are gone: 1,263 expectations, up from 1,217.
+  - Evidence labelling now draws from alerts the SIEM can still return, before
+    falling back to the rest. The sample size is unchanged, so the world still
+    advertises the same totals, but links a connector can actually retrieve rise
+    from 288 to 1,185 and encounterable decoys from 41 to 246.
+- `scripts/score` measures attribution recall against retrievable links rather than
+  every labelled one. A flawless connector previously scored 0.088 and was told it
+  had missed three thousand links no API would return.
 
 ### Added
+- `scripts/verify.py` now checks the **authored prose** against the world, not only
+  the world against the APIs. Six audits found the same failure class repeatedly: a
+  hand-written sentence drifting away from the query printed beside it. Generated
+  numbers stay honest on their own; sentences do not.
 - `DISCLAIMER.md`, stating plainly that the world is fabricated and that its output
   must not reach a real risk register.
 - Screenshots of the Control Center in the README.
 - A published world contract, so a change that invalidates golden files is visible.
 
-## [0.1.0] - 2026-08-22
+## 0.1.0 - 2026-08-22
 
 The first complete state: a world, seven lenses, and the ground truth to score against.
 
@@ -24,11 +45,11 @@ The first complete state: a world, seven lenses, and the ground truth to score a
 - **Seven lenses.** ServiceNow, Splunk, Onspring, Okta, Tenable, Workday and
   CrowdStrike, covering all seven connector patterns in DESIGN.md #5, plus framework
   and taxonomy sync and binary evidence retrieval.
-- **Ground truth.** 1,217 expectations across attribution, conflict, degradation and
-  absence, with 5,023 true evidence links and 773 deliberate traps.
+- **Ground truth.** 1,263 expectations across attribution, conflict, degradation and
+  absence, with 4,983 true evidence links and 747 deliberate traps.
 - **Control Center.** Eight surfaces generated from the world, so the documentation
   cannot drift from what a connector actually reads, including an eight-chapter manual.
-- **Harness.** 89 self-checks, a three-level chaos dial, real OAuth against Keycloak,
+- **Harness.** 97 self-checks, a three-level chaos dial, real OAuth against Keycloak,
   and an adversarial WireMock proxy for the degradation family.
 - **Provenance manifests.** Every twin records where its response shapes came from.
   All seven are `unverified`.

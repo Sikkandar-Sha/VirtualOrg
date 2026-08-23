@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% import "diagrams.html" as d %}
+{# `with context` so the diagrams can read live counts instead of hardcoding them #}
+{% import "diagrams.html" as d with context %}
 {% block title %}Manual · {{ chapter }}{% endblock %}
 {% block body %}
 <div class="eyebrow">Surface 7 · manual</div>
@@ -30,8 +31,9 @@
   <p><b>“Application” here means a business application belonging to the simulated
     company</b>, “Nexus Sync 1”, “Edge Service 2”, not a running program and not a
     vendor tool. There are {{ inventory.applications }} of them and they are rows in
-    <code>world.application</code>, part of the enterprise being modelled. The three
-    boxes on the right are the only <i>systems</i>: vendor APIs your kit connects to.
+    <code>world.application</code>, part of the enterprise being modelled. The
+    {{ lens_count_word }} boxes on the right are the only <i>systems</i>: vendor APIs
+    your kit connects to.
     ServiceNow catalogues the applications the way a real CMDB does; it is not one.</p>
 </div>
 
@@ -47,9 +49,9 @@
   <tr><th>Service</th><th>Port</th><th>Role</th><th>Talks to</th></tr>
   <tr><td>world-db</td><td>5433</td><td>The world. Complete and true.</td><td>-</td></tr>
   <tr><td>world-engine</td><td>-</td><td>Applies schema, generates the world, exits.</td><td>world-db (writes)</td></tr>
-  <tr><td>twin-gateway</td><td>8080</td><td>Three vendor faces. <b>This is what your kit calls.</b></td><td>world-db (reads)</td></tr>
+  <tr><td>twin-gateway</td><td>8080</td><td>{{ lens_count }} vendor faces. <b>This is what your kit calls.</b></td><td>world-db (reads)</td></tr>
   <tr><td>control-center</td><td>{{ cc_port }}</td><td>This app. Read-only, computes nothing.</td><td>world-db, twin-gateway</td></tr>
-  <tr><td>keycloak</td><td>8081</td><td>Real OAuth, for when <code>VO_AUTH_MODE=jwks</code> lands.</td><td>-</td></tr>
+  <tr><td>keycloak</td><td>8081</td><td>Real OAuth. Set <code>VO_AUTH_MODE=jwks</code> to require signed tokens.</td><td>-</td></tr>
   <tr><td>wiremock</td><td>8090</td><td>Adversarial layer. Only under <code>--profile chaos</code>.</td><td>proxies twin-gateway</td></tr>
 </table></div>
 
@@ -214,10 +216,9 @@
 {% if orphans %}
 <h2>Applications attached to no business service ({{ orphans|length }})</h2>
 <p class="note">These run on real machines but nothing depends on them, so they inherit no
-  criticality from the service layer. This is a by-product of how the generator samples
-  dependencies rather than a designed condition, which is precisely why it is worth
-  showing: it is not recorded in <code>world.expectation</code>, so no kit can be scored
-  on finding it.</p>
+  criticality from the service layer. It is a deliberate slice, recorded in
+  <code>world.expectation</code> under the absence family, so a kit can be scored on
+  finding it.</p>
 <div class="wrap"><table>
   <tr><th>Application</th><th>Name</th><th>Criticality</th><th class="num">Assets</th><th>Owner</th></tr>
   {% for o in orphans %}
@@ -246,16 +247,18 @@
 </table></div>
 
 <h2>2 · Authenticate</h2>
-<p class="note">Static bearer token today. <b>Every endpoint except <code>/healthz</code>
+<p class="note">Static bearer token today. <b>Every data endpoint
   requires it</b>, including the <code>/_lens/{id}</code> and <code>/_provenance</code>
-  metadata routes. A missing or wrong token is a <code>401</code>. <code>/healthz</code>
-  stays open because probes and CI need to know the service is up before they have
-  anything to authenticate with, and it returns only liveness and the world seed.</p>
+  metadata routes. A missing or wrong token is a <code>401</code>. Four paths stay
+  open: <code>/healthz</code>, because probes and CI need to know the service is up
+  before they have anything to authenticate with, and it returns only liveness and the
+  world seed; and <code>/docs</code>, <code>/redoc</code> and
+  <code>/openapi.json</code>, which describe the interface and expose no data.</p>
 <pre>Authorization: Bearer {{ token }}</pre>
 <p class="note">The examples below reference <code>$VO_TOKEN</code> rather than a literal
   value, because this page has no authentication and should not print a credential.
   Export it from your <code>.env</code> before pasting them:</p>
-<pre>export VO_TOKEN=$(grep '^VO_TOKENS=' .env | cut -d= -f2 | cut -d, -f1)</pre>
+<pre>export VO_TOKEN=$(sed -n 's/^VO_TOKENS=\([^ #,]*\).*/\1/p' .env)</pre>
 <p class="note">Set <code>VO_TOKENS</code> in <code>.env</code> to change it. It is
   comma-separated, so several tokens can be valid at once.</p>
 <p class="note"><b>Real OAuth is available.</b> <code>VO_AUTH_MODE=jwks</code> validates
@@ -475,12 +478,14 @@
       <td>The address pool is smaller than the asset count, so an IP is not a stable key.
         Matching on IP alone will merge two machines.</td></tr>
   <tr><td>ServiceNow returns FQDN in both <code>name</code> and <code>fqdn</code></td>
-      <td>The short hostname exists in the world but no lens exposes it. Do not expect to
-        find <code>LT-4001</code> anywhere in an API response.</td></tr>
+      <td>The short hostname is not recoverable <i>from ServiceNow</i>: it duplicates
+        the FQDN into both fields. Tenable and CrowdStrike do carry it, so
+        <code>LT-4001</code> is findable, just not where a CMDB-first connector
+        looks.</td></tr>
   <tr><td>Splunk only knows assets that alerted</td>
       <td>Absence from the SIEM is not evidence a machine does not exist.</td></tr>
   <tr><td>Staleness differs per lens</td>
-      <td>A CMDB row up to 72h old and a SIEM row 2h old are not equally authoritative,
+      <td>A CMDB row up to 24h old and a SIEM row 5 minutes old are not equally authoritative,
         and the older one is old, not wrong.</td></tr>
   <tr><td>Owner names are strings, not ids</td>
       <td>People appear as bare names on assets and controls. HR calls the same person
@@ -518,7 +523,7 @@
 <h2>Score your product</h2>
 <p class="note"><code>scripts/score</code> reads what your product concluded and reports
   precision and recall per family, plus exactly which of the
-  {{ "{:,}".format(corpus.traps) }} traps it fell for.</p>
+  {{ "{:,}".format(corpus.reachable_traps) }} retrievable traps it fell for. {{ "{:,}".format(corpus.traps) }} are planted in all; the rest sit on records no API returns, so no kit can meet them.</p>
 <pre>python3 examples/reference-kit/kit.py &gt; posture.json
 ./scripts/score posture.json</pre>
 <p class="note">The contract is deliberately small. Findings match on the
@@ -526,6 +531,7 @@
   measures whether the right thing was found rather than how it was phrased.</p>
 <pre>{
   "meta": { "world_seed": {{ meta.seed }}, "as_of": "{{ meta.as_of }}",
+            "scale": {{ meta.scale }}, "chaos": {{ meta.chaos }},
             "generator_version": "{{ meta.generator_version }}" },
   "findings":     [{ "family": "conflict", "subject_kind": "control", "subject_id": "C-017" }],
   "attributions": [{ "evidence_id": "ALR-009852", "control_id": "C-011" }]
@@ -559,7 +565,9 @@
   system asserts a link it cannot support, rather than to reward a better classifier.</p>
 <div class="status">
   <div><div class="k">True links</div><div class="v">{{ "{:,}".format(corpus.true_links) }}</div></div>
+  <div><div class="k">Retrievable</div><div class="v">{{ "{:,}".format(corpus.reachable_links) }}</div></div>
   <div><div class="k">Traps</div><div class="v">{{ "{:,}".format(corpus.traps) }}</div></div>
+  <div><div class="k">Traps retrievable</div><div class="v">{{ "{:,}".format(corpus.reachable_traps) }}</div></div>
   <div><div class="k">Controls with evidence</div><div class="v">{{ corpus.controls_with_evidence }}</div></div>
 </div>
 <pre>-- precision and recall against the answer key

@@ -4,8 +4,10 @@ A synthetic enterprise for testing a risk-posture product. One world-state in on
 database; every tool the product connects to is a lens over it, deliberately
 imperfect in the way real tools are.
 
-**Status:** design only, no code. **Target host:** Docker on ARM64, laptop-class.
-**Scope:** read-only API consumption.
+**Status:** original design brief, kept as written. It is the reasoning behind the
+build, not a description of it; where the two differ the code and README are current
+and this document is the record of intent. **Target host:** Docker on ARM64,
+laptop-class. **Scope:** read-only API consumption.
 
 The kit under test consumes SIEM, incident management, GRC and audit systems over
 their APIs, and produces residual risk per business service, control effectiveness
@@ -45,14 +47,14 @@ and coverage-gap problems the kit exists to solve.
 
 ## 2. Architecture
 
-Five containers, one `docker compose up`, ~4 GB, boots in seconds, snapshot-restores
+Six containers, one `docker compose up`, ~4 GB, boots in seconds, snapshot-restores
 in under a second, native ARM64.
 
 | Container | Responsibility |
 |---|---|
 | `world-db` | Postgres. *The* world — people, assets, apps, services, vendors, controls, evidence, findings, incidents, risks and their relationships, across three years of history. |
-| `world-engine` | Owns state. Seeds and pre-ages the world, runs the logical clock, executes scenario files, applies the chaos dial, injects conflicts. Writes; never serves the kit. |
-| `twin-gateway` | One process wearing N vendor faces, routed by hostname. Every response is a projection over `world-db` through a lens. Stateless, always well-behaved. |
+| `world-engine` | Owns state. Seeds and pre-ages the world, applies the chaos dial, injects conflicts, then exits. Writes; never serves the kit. (The logical clock and scenario files were scoped out: the world is generated to a fixed `--as-of` instead.) |
+| `twin-gateway` | One process wearing N vendor faces, routed by path prefix (see #6). Every response is a projection over `world-db` through a lens. Stateless, always well-behaved. |
 | `wiremock` | Adversarial behaviour only — 429s, expired tokens, schema drift, truncated pages, timeouts, a source unreachable for three days. |
 | `keycloak` | Real OAuth. Genuine token expiry, refresh, JWKS rotation. |
 | `control-center` | Browsable specification of the enterprise (#8). Strictly read-only. |
@@ -65,7 +67,7 @@ a quarter. VirtualOrg is containerised always, the kit only in CI.
 
 ```bash
 docker compose up -d                   # dev: VirtualOrg only
-docker compose --profile ci up -d      # CI: adds the kit in-network
+docker compose --profile ci up -d      # template: uncomment the kit service first
 docker compose --profile chaos up -d   # adds WireMock in front of a twin
 ```
 
@@ -158,7 +160,7 @@ most likely to be wrong in a way nobody notices.
 - ~40 risks in a register
 - 3 years of control tests, audit findings, incidents and evidence
 
-A few hundred thousand rows. Weeks, not quarters.
+Tens of thousands of rows: the built world is about 38,000. Weeks, not quarters.
 
 ---
 

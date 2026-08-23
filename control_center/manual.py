@@ -10,6 +10,8 @@ Only prose is authored. DESIGN.md #8: a written description of the virtual org
 generated cannot drift from the thing it describes.
 """
 import os
+import re
+from psycopg2 import sql
 from twins import db
 from . import probes
 
@@ -85,7 +87,8 @@ DOMAINS = [
     ("Evidence, the answer key", "The attribution ground truth. Nothing in any vendor "
      "API links a detection to a control; this table says what the true link is.", [
         ("evidence", "`control_id` is the TRUE attribution for every event. `is_trap` "
-         "marks topically-adjacent decoys that are NOT evidence for that control."),
+         "marks decoys drawn from the whole control library, which are NOT evidence "
+         "for the control they name."),
      ]),
     ("Lenses, where all loss lives", "The world is always true and complete. Every "
      "degradation a connector meets is applied here, at read time.", [
@@ -128,8 +131,9 @@ REACH = [
     ("person", "splunk / servicenow / grc", "(embedded)", "email or full name",
      "Also appears as an owner name or user email on other records."),
     ("account", "iam", "GET /iam/api/v1/users", "login",
-     "Only accounts federated to the IdP. `status` plus `profile.terminationDate` is "
-     "what makes orphaned access findable, an ACTIVE user with a termination date."),
+     "Only accounts federated to the IdP. Orphaned access is an account still "
+     "ACTIVE with NO termination date, on a person HR says has left: the IdP "
+     "never learned, so finding it needs the HR join."),
     ("policy", "grc", "GET /grc/api/v1/policies", "reference",
      "Carries an implementing-control count, so a policy nothing implements is visible."),
     ("control_exception", "grc", "GET /grc/api/v1/exceptions", "id",
@@ -189,7 +193,8 @@ UNREACHABLE = {
     "risk_service": "Not exposed.",
     "evidence": "Ground truth. Deliberately never exposed: it is the answer key.",
     "expectation": "Ground truth. Deliberately never exposed.",
-    "department": "Not exposed.",
+    "department": "The DEP- id is never exposed. Its name and cost centre are, on "
+                  "every HR worker, as `organization` and `cost_center`.",
     "lens": "Exposed only through /_lens/{id}, which is not a vendor endpoint.",
     "lens_visibility": "Not exposed.",
     "world_meta": "Exposed through /healthz only.",
@@ -226,7 +231,8 @@ def schema():
     for c in cols:
         t = c["table_name"]
         if t not in out:
-            n = db.one(f'SELECT count(*) n FROM world."{t}"')["n"]
+            n = db.one(sql.SQL('SELECT count(*) n FROM world.{}').format(
+                sql.Identifier(t)))["n"]
             out[t] = {"name": t, "rows": n, "columns": []}
         out[t]["columns"].append({
             "name": c["column_name"], "type": c["data_type"],
@@ -280,6 +286,14 @@ def reach_matrix():
 
 
 # ------------------------------------------------------------- live twin surface
+def _first_para(doc):
+    """The whole first paragraph, unwrapped. Splitting on the first newline cut
+    docstrings mid-clause on the page that claims it cannot fall behind the code."""
+    if not doc:
+        return ""
+    return " ".join(re.split(r"\n\s*\n", doc.strip())[0].split())
+
+
 def endpoints():
     """The twin's route table, read from the twin's own source of truth."""
     from twins import app as twin_app
@@ -303,7 +317,7 @@ def endpoints():
             except (TypeError, ValueError):
                 pass
         out.append({"path": path, "methods": [m for m in methods if m != "HEAD"],
-                    "doc": (fn.__doc__ or "").strip().split("\n")[0] if fn else "",
+                    "doc": _first_para(fn.__doc__) if fn else "",
                     "params": params})
     return sorted(out, key=lambda x: x["path"])
 

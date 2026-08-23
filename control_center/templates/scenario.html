@@ -45,6 +45,6 @@
       {{ p.state }}<small>{{ p.detail }}</small></div></div>
   {% endfor %}
 </div>
-<p class="note" style="margin-top:12px">WireMock shows <b>off</b> unless you started the chaos
-  profile. That is the degradation family's only source, with it down, family 3 is not live.</p>
+<p class="note" style="margin-top:12px">WireMock reads <b>off</b> unless you started the chaos
+  profile. It is no longer the degradation family's only source: the world generates degradation expectations of its own, so the family stays live with WireMock down.</p>
 {% endblock %}

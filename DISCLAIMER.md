@@ -62,8 +62,8 @@ that reason. See [SECURITY.md](SECURITY.md) before changing either.
 ## The twins are models, not the vendors
 
 Every API twin here was written from published documentation and our understanding of
-each vendor's behaviour. **None was captured from a real tenant, and all seven are derived as
-`unverified`** from `twins/provenance.yaml`, which records for each twin what its
+each vendor's behaviour. **None was captured from a real tenant, and all seven are marked
+`unverified`**, a status derived from `twins/provenance.yaml`, which records for each twin what its
 shapes were based on and whether anything was ever captured. The status is computed
 from those two facts rather than asserted, and served at `/_provenance`.
 

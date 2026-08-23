@@ -33,8 +33,9 @@ git checkout main && git merge --ff-only dev && git push
 ## Before you open a pull request
 
 ```bash
+pip install -r requirements-host.txt   # once; verify.py needs httpx and PyYAML
 docker compose up -d
-python3 scripts/verify.py     # must be green
+python3 scripts/verify.py         # must be green
 ```
 
 `scripts/verify.py` tests VirtualOrg, not any kit. It proves the conditions the ground
