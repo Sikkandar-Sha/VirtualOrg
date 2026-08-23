@@ -1,11 +1,11 @@
-# VirtualOrg — the whole synthetic enterprise.
+# VirtualOrg, the whole synthetic enterprise.
 #
 #   docker compose up -d              VirtualOrg only; run your kit from your IDE
 #   docker compose --profile ci up -d adds the kit under test (CI)
 #   docker compose --profile chaos up -d  puts WireMock in front of a twin
 #
 # The kit is deliberately NOT a default service: developers need a debugger
-# attached to it, and a rebuild-per-edit cycle is the wrong trade. (DESIGN.md §2)
+# attached to it, and a rebuild-per-edit cycle is the wrong trade. (DESIGN.md #2)
 
 # Every port binds 127.0.0.1. This harness ships working credentials on purpose
 # (see SECURITY.md), and the Postgres role is the image's bootstrap superuser, so
@@ -69,7 +69,7 @@ services:
       retries: 12
     mem_limit: 1g
 
-  # Phase 3. Read-only over world-db and the twins; computes nothing. (DESIGN.md §8)
+  # Phase 3. Read-only over world-db and the twins; computes nothing. (DESIGN.md #8)
   control-center:
     build: .
     depends_on:
@@ -99,7 +99,7 @@ services:
       KC_HEALTH_ENABLED: "true"
       # Pin the issuer. Keycloak otherwise derives `iss` from the request host, so a
       # token fetched on localhost:8081 could never satisfy a twin that expects
-      # keycloak:8080 — the same mismatch self-hosted customers hit for real.
+      # keycloak:8080, the same mismatch self-hosted customers hit for real.
       KC_HOSTNAME: http://localhost:8081
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
     volumes:
@@ -112,7 +112,7 @@ services:
       retries: 30
     mem_limit: 1g
 
-  # Adversarial layer. Twins never misbehave; WireMock does. (DESIGN.md §2)
+  # Adversarial layer. Twins never misbehave; WireMock does. (DESIGN.md #2)
   wiremock:
     profiles: ["chaos"]
     image: wiremock/wiremock:3.10.0
@@ -122,7 +122,7 @@ services:
     ports: ["${VO_BIND:-127.0.0.1}:8090:8080"]
     mem_limit: 512m
 
-  # The kit under test — CI only.
+  # The kit under test. CI only.
   # kit:
   #   profiles: ["ci"]
   #   build: ../your-risk-kit

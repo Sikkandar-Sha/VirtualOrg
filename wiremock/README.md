@@ -1,9 +1,9 @@
 # Adversarial layer
 
-Twins never misbehave. This does. (DESIGN.md §2)
+Twins never misbehave. This does. (DESIGN.md #2)
 
 WireMock sits in front of `twin-gateway` and serves the **degradation** assertion
-family (§7). A catch-all mapping proxies everything to the twin, so the happy path is
+family (#7). A catch-all mapping proxies everything to the twin, so the happy path is
 identical to hitting `:8080` directly; the failure mappings intercept specific paths.
 
 ```bash

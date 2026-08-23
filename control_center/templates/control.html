@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block title %}{{ c.ref }}{% endblock %}
 {% block body %}
 <div class="crumb"><a href="/spine">Surface 2 · the spine</a></div>
-<h1>{{ c.ref }} — {{ c.title }}</h1>
+<h1>{{ c.ref }} · {{ c.title }}</h1>
 <p class="lede">Tested {{ c.test_frequency }} · {{ 'automated' if c.automated else 'manual' }} ·
   owner {% if c.owner_id %}<a href="/org/person/{{ c.owner_id }}">{{ c.owner_name }}</a>{% else %}none of record{% endif %}
   {%- if c.owner_ended_on %} <span class="tag conflict">left {{ c.owner_ended_on }}</span>{% endif %}</p>
@@ -13,7 +13,7 @@
 </div>
 {% endif %}
 
-<h2>Evidence — true attribution, with traps</h2>
+<h2>Evidence: true attribution, with traps</h2>
 <p class="note">Nothing in the vendor APIs links any of this to the control. That attribution
   is the kit's job; this column is the answer key.</p>
 {% if summary %}
@@ -21,12 +21,12 @@
   <tr><th>Kind</th><th>Genuine evidence</th><th class="num">Rows</th></tr>
   {% for s in summary %}
   <tr><td>{{ s.kind }}</td>
-      <td>{% if s.is_trap %}<span class="tag trap">trap — topically adjacent</span>{% else %}yes{% endif %}</td>
+      <td>{% if s.is_trap %}<span class="tag trap">trap, topically adjacent</span>{% else %}yes{% endif %}</td>
       <td class="num">{{ s.n }}</td></tr>
   {% endfor %}
 </table></div>
 {% else %}
-<span class="void">no evidence source of any kind — this control is silent, not healthy</span>
+<span class="void">no evidence source of any kind, this control is silent, not healthy</span>
 {% endif %}
 
 <div class="cols">
@@ -69,7 +69,7 @@
         <td>{% if t.result != 'effective' %}<span class="tag conflict">{{ t.result }}</span>{% else %}{{ t.result }}{% endif %}</td></tr>
     {% endfor %}
   </table>
-  {% else %}<span class="void">never operationalised — no test has ever run</span>{% endif %}
+  {% else %}<span class="void">never operationalised, no test has ever run</span>{% endif %}
 </div>
 <div>
   <h2>Audit findings</h2>

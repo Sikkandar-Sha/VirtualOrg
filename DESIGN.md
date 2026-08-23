@@ -14,7 +14,7 @@ evidence trails. It writes nothing back. VirtualOrg gives it an enterprise to re
 and knows in advance what it *should* conclude.
 
 **What this is not:** not a cyber range, not a collection of real security products,
-not a log-generation pipeline. See §11 for what was cut and why.
+not a log-generation pipeline. See #11 for what was cut and why.
 
 ---
 
@@ -55,7 +55,7 @@ in under a second, native ARM64.
 | `twin-gateway` | One process wearing N vendor faces, routed by hostname. Every response is a projection over `world-db` through a lens. Stateless, always well-behaved. |
 | `wiremock` | Adversarial behaviour only — 429s, expired tokens, schema drift, truncated pages, timeouts, a source unreachable for three days. |
 | `keycloak` | Real OAuth. Genuine token expiry, refresh, JWKS rotation. |
-| `control-center` | Browsable specification of the enterprise (§8). Strictly read-only. |
+| `control-center` | Browsable specification of the enterprise (#8). Strictly read-only. |
 
 ### What runs where
 
@@ -72,7 +72,7 @@ docker compose --profile chaos up -d   # adds WireMock in front of a twin
 Which means the kit's `base_url` differs by where it runs —
 `http://localhost:8080/servicenow` from an IDE, `http://twin-gateway:8080/servicenow`
 from inside the network. Two config files, no code change. This is the practical
-reason §6 exists.
+reason #6 exists.
 
 Route by **path prefix** (`/servicenow`, `/splunk`, `/grc`), not per-vendor hostnames.
 Hostnames like `https://servicenow.virtual-org.test` demo better but need an
@@ -90,7 +90,7 @@ Doing it on every reset will quietly become the bottleneck. Seed once, then snap
 ./scripts/snapshot my-case   # freeze a variant
 ```
 
-One dump per scenario baseline. That is what makes the pure-function property in §7
+One dump per scenario baseline. That is what makes the pure-function property in #7
 usable in practice — restore `W₁`, run the kit, assert `P₁`, move on.
 
 **The twin / WireMock split:** twins are dynamic, database-backed and always behave
@@ -284,7 +284,7 @@ count as certification.
 
 ## 6. The connector contract
 
-§5 specifies VirtualOrg's side of the boundary. This is the kit's side. VirtualOrg is
+Section #5 specifies VirtualOrg's side of the boundary. This is the kit's side. VirtualOrg is
 only usable if the kit can be aimed at it **without editing the kit** — otherwise the
 test environment needs a patched build, and you are testing code that isn't what ships.
 
@@ -341,7 +341,7 @@ Making `base_url` configurable is necessary and not sufficient.
 | `endpoint.base_url` | The obvious one. Usually already config, because every customer's instance sits at a different address. |
 | `auth.token_url` | **The one that actually bites.** Frequently hardcoded even when the API base isn't — which leaves token refresh and expiry, the fiddliest part of most connectors, untestable. |
 | `endpoint.tls` | A connector that hard-refuses `http://` or self-signed certs can't reach a local twin — or a customer behind their own TLS-terminating proxy. |
-| `schema_profile` | Customer-specific field names, renamed statuses and local choice values belong in a data file, not the parser. This is what makes §5's three customer profiles testable. |
+| `schema_profile` | Customer-specific field names, renamed statuses and local choice values belong in a data file, not the parser. This is what makes #5's three customer profiles testable. |
 
 ```yaml
 # profiles/acme-customized.yaml
@@ -550,7 +550,7 @@ Plus canary probes for schema drift. *This is where the mock-drift hazard is pai
 
 ## 10. Open questions
 
-**Does the kit already meet the §6 contract?** The contract is specified; whether the
+**Does the kit already meet the #6 contract?** The contract is specified; whether the
 current codebase satisfies it is not yet known. Run the grep for absolute URLs outside
 tests, and check the auth path specifically — an API base that is configurable while the
 token endpoint is a constant is the common case, and it fails the same way. Everything
@@ -587,7 +587,7 @@ calls an endpoint and receives JSON; it cannot determine whether that JSON came 
 real product or a database query.
 
 Running the real product tests exactly one thing: whether our understanding of that
-vendor's API is correct. That is real — it is why §5's provenance discipline and Phase 4
+vendor's API is correct. That is real — it is why #5's provenance discipline and Phase 4
 exist — but it is *one* thing, and testing it needs any data, not realistic data. Three
 alerts verify pagination, auth and schema. A cyber range is not required to produce
 three alerts.
@@ -622,6 +622,6 @@ controlled), determinism and iteration speed are not close.
 
 ### The one thing that comes back later
 
-Active and passive scanning is on the roadmap but not planned. The claims model in §4
+Active and passive scanning is on the roadmap but not planned. The claims model in #4
 is the seam: a first-party scanner is a new source type with higher confidence, added
 without touching reconciliation. Keep that seam intact and the decision stays cheap.

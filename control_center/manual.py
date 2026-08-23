@@ -1,11 +1,11 @@
 """
 Data behind the Manual surface.
 
-Everything factual here is introspected live — table and column names from
+Everything factual here is introspected live, table and column names from
 information_schema, row counts from the tables themselves, the endpoint list from
 the twin's own route table, example payloads from real calls to the running twin.
 
-Only prose is authored. DESIGN.md §8: a written description of the virtual org
+Only prose is authored. DESIGN.md #8: a written description of the virtual org
 "will be wrong within a month and will then actively mislead". A manual that is
 generated cannot drift from the thing it describes.
 """
@@ -15,11 +15,11 @@ from . import probes
 
 # ---------------------------------------------------------------- authored prose
 # The one hand-maintained structure: which domain each table belongs to, and what
-# it is for. Table NAMES are still checked against the live schema — anything the
+# it is for. Table NAMES are still checked against the live schema, anything the
 # generator adds and this map misses is reported as undocumented, not hidden.
 DOMAINS = [
     ("People and org", "Who works here, and who left. Leavers are the engine behind "
-     "most planted conflicts — orphaned accounts, departed control owners.", [
+     "most planted conflicts, orphaned accounts, departed control owners.", [
         ("department", "Cost centres. Ten of them, fixed."),
         ("person", "Employees and contractors. `ended_on` non-null marks a leaver."),
      ]),
@@ -29,12 +29,12 @@ DOMAINS = [
          "after the person's `ended_on` is orphaned access."),
         ("access_group", "Directory groups. `privileged` marks the ones that matter."),
         ("group_membership", "Who is in which group. `revoked_on` NULL after a leaver's "
-         "`ended_on` is retained access — worse when the group is privileged."),
+         "`ended_on` is retained access, worse when the group is privileged."),
      ]),
-    ("Assets and infrastructure", "The machines. Every one carries four identifiers, "
-     "and each lens picks a different one — this is where correlation is manufactured.", [
-        ("asset", "Endpoints, servers, cloud. Carries four identifiers of its own — "
-         "hostname, fqdn, asset_tag and ip — and the EDR lens mints a fifth, an agent "
+    ("Assets and infrastructure", "The machines. Each lens picks a different identifier "
+     "for the same box, which is where correlation is manufactured.", [
+        ("asset", "Endpoints, servers, cloud. Carries four identifiers of its own. "
+         "hostname, fqdn, asset_tag and ip, and the EDR lens mints a fifth, an agent "
          "id, which exists nowhere in the world. IPs are recycled: the pool is smaller "
          "than the asset count."),
         ("software", "Packages, with an `eol_on` date. Past it means unsupported."),
@@ -58,17 +58,17 @@ DOMAINS = [
          "boolean. This is what lets a failure be explained, not just computed."),
         ("requirement_crosswalk", "Equivalence between two frameworks' requirements, "
          "mostly partial. A control failure therefore moves ISO and CSF by different "
-         "amounts — and you can say why."),
+         "amounts, and you can say why."),
         ("control_test", "Three years of test results. Some controls drift "
          "effective → ineffective → back."),
         ("policy", "The written rule, with an owner and a review cycle."),
         ("policy_control", "Which controls implement a policy. Some policies have none."),
         ("control_exception", "An approved deviation with an expiry. `status` is what "
-         "the platform asserts — it can read `active` months after `expires_on`."),
+         "the platform asserts, it can read `active` months after `expires_on`."),
         ("risk_treatment", "accept / mitigate / transfer / avoid, with a target date."),
         ("audit", "Three annual audit cycles."),
         ("finding", "Audit findings with due dates. `status` open/overdue/closed."),
-        ("attachment", "Binary evidence hanging off a finding. Metadata only — the "
+        ("attachment", "Binary evidence hanging off a finding. Metadata only, the "
          "bytes are generated on read, deterministically."),
         ("risk", "The register. `last_reviewed_on` + `review_period_days` is what makes "
          "a risk demonstrably stale while the API still calls it current."),
@@ -78,16 +78,16 @@ DOMAINS = [
     ("Security posture", "What the SIEM and the scanners would see.", [
         ("detection_rule", "15 named rules."),
         ("alert", "~20,000 detections across three years, tied to an asset and a person."),
-        ("incident", "`stated_impact` may contradict the service tier — a planted conflict."),
+        ("incident", "`stated_impact` may contradict the service tier, a planted conflict."),
         ("vulnerability", "CVEs per asset, with remediation dates."),
         ("misconfiguration", "Baseline drift against CIS-style rules."),
      ]),
-    ("Evidence — the answer key", "The attribution ground truth. Nothing in any vendor "
+    ("Evidence, the answer key", "The attribution ground truth. Nothing in any vendor "
      "API links a detection to a control; this table says what the true link is.", [
         ("evidence", "`control_id` is the TRUE attribution for every event. `is_trap` "
          "marks topically-adjacent decoys that are NOT evidence for that control."),
      ]),
-    ("Lenses — where all loss lives", "The world is always true and complete. Every "
+    ("Lenses, where all loss lives", "The world is always true and complete. Every "
      "degradation a connector meets is applied here, at read time.", [
         ("lens", "Per-tool loss profile: coverage, latency, retention, identifier style, "
          "blind spot."),
@@ -106,7 +106,7 @@ REACH = [
     ("asset", "servicenow", "GET /servicenow/api/now/table/cmdb_ci_computer", "fqdn",
      "97% of assets. Names them by FQDN."),
     ("asset", "grc", "GET /grc/api/v1/assets", "asset_tag",
-     "91% of assets — a GRC platform knows what was typed into it, not what exists. "
+     "91% of assets, a GRC platform knows what was typed into it, not what exists. "
      "Names them by asset tag."),
     ("asset", "splunk", "GET /splunk/services/search/jobs/{sid}/results", "ip",
      "Only assets that raised an alert in the retention window. Names them by IP."),
@@ -117,19 +117,19 @@ REACH = [
     ("detection_rule", "splunk", "GET /splunk/services/search/jobs/{sid}/results", "rule_id",
      "Reachable only as a field on an alert, never listed on its own."),
     ("person", "hr", "GET /hr/api/v1/workers", "employee_id",
-     "The system of record. Employees only — contractors are structurally absent, so "
+     "The system of record. Employees only, contractors are structurally absent, so "
      "a departed contractor cannot be confirmed as a leaver from HR at all."),
     ("asset", "edr", "POST /edr/devices/entities/devices/v2", "agent_id",
      "79% of live assets. Named by the agent installed on them; also carries the "
      "short hostname, so this is the one join that works without inference."),
     ("person", "iam", "GET /iam/api/v1/users", "login",
      "Listed at last. 94% coverage; named by directory login, not by the EMP- id or "
-     "the full name the other lenses show — correlating them is entity resolution."),
+     "the full name the other lenses show, correlating them is entity resolution."),
     ("person", "splunk / servicenow / grc", "(embedded)", "email or full name",
      "Also appears as an owner name or user email on other records."),
     ("account", "iam", "GET /iam/api/v1/users", "login",
      "Only accounts federated to the IdP. `status` plus `profile.terminationDate` is "
-     "what makes orphaned access findable — an ACTIVE user with a termination date."),
+     "what makes orphaned access findable, an ACTIVE user with a termination date."),
     ("policy", "grc", "GET /grc/api/v1/policies", "reference",
      "Carries an implementing-control count, so a policy nothing implements is visible."),
     ("control_exception", "grc", "GET /grc/api/v1/exceptions", "id",
@@ -149,7 +149,7 @@ REACH = [
     ("access_group", "iam", "GET /iam/api/v1/groups", "group id",
      "Okta groups only. AD groups are behind the same blind spot as AD accounts."),
     ("group_membership", "iam", "GET /iam/api/v1/users/{login}/groups", "group id",
-     "Per user, with grant and revocation dates — so retained access is visible."),
+     "Per user, with grant and revocation dates, so retained access is visible."),
     ("vulnerability", "scanner", "GET /scanner/api/v3/findings", "finding_id",
      "365-day retention, 24h behind. Poll incrementally with `since`."),
     ("control", "grc", "GET /grc/api/v1/controls", "reference",
@@ -164,14 +164,14 @@ REACH = [
     ("framework", "grc", "GET /grc/api/v1/frameworks", "name",
      "Two of them, with requirement counts."),
     ("requirement_crosswalk", "grc", "GET /grc/api/v1/crosswalks", "source + target ref",
-     "Equivalence is mostly partial — 56 of 70 rows are below 1.0."),
+     "Equivalence is mostly partial. 56 of 70 rows are below 1.0."),
     ("attachment", "grc", "GET /grc/api/v1/findings/{id}/attachments", "id",
      "Metadata plus a download_token. The bytes need that second credential, and "
      "anything over 5 MB is refused with a 413."),
     ("business_service", "servicenow", "GET /servicenow/api/now/table/cmdb_ci_service", "name",
      "Name, tier and owner. Named by CI name, not by the SVC- id."),
     ("business_service", "servicenow", "GET /servicenow/api/now/table/incident", "service id",
-     "Also appears as a bare id on an incident — a different identifier for the same thing."),
+     "Also appears as a bare id on an incident, a different identifier for the same thing."),
     ("application", "servicenow", "GET /servicenow/api/now/table/cmdb_ci_appl", "name",
      "Subject to the same 97% CMDB coverage as computers."),
     ("service_dependency", "servicenow", "GET /servicenow/api/now/table/cmdb_rel_ci", "parent + child name",
@@ -187,7 +187,7 @@ UNREACHABLE = {
     "audit": "Not exposed. Findings carry no audit reference.",
     "risk_control": "Not exposed. Which controls mitigate which risk is not discoverable.",
     "risk_service": "Not exposed.",
-    "evidence": "Ground truth. Deliberately never exposed — it is the answer key.",
+    "evidence": "Ground truth. Deliberately never exposed: it is the answer key.",
     "expectation": "Ground truth. Deliberately never exposed.",
     "department": "Not exposed.",
     "lens": "Exposed only through /_lens/{id}, which is not a vendor endpoint.",
@@ -335,7 +335,7 @@ def profile_fieldmaps():
     prof = yaml.safe_load(open(p))
     names = list(prof)
     out = {}
-    # every table the profile defines, not a hardcoded pair — adding a table to the
+    # every table the profile defines, not a hardcoded pair, adding a table to the
     # YAML must show up here without anyone remembering to edit this file
     for table in sorted(prof[names[0]]):
         canon = list(prof[names[0]][table]["fields"])
@@ -364,11 +364,16 @@ def worked_correlation():
     a = db.one("""SELECT a.*, p.full_name AS owner_name, p.ended_on AS owner_ended_on
                     FROM asset a LEFT JOIN person p ON p.id = a.owner_person_id
                    WHERE a.id = %s""", (row["id"],))
+    # Restricted to lenses that track assets. An identity or HR lens does not see
+    # machines by design, and showing it as "not visible" here would read as a
+    # coverage gap rather than a category difference.
     seen = db.q("""SELECT l.id AS lens_id, l.vendor, l.identifier_style,
                           v.external_id, v.last_seen
                      FROM lens l
                      LEFT JOIN lens_visibility v ON v.lens_id = l.id
                           AND v.entity_kind = 'asset' AND v.entity_id = %s
+                    WHERE EXISTS (SELECT 1 FROM lens_visibility x
+                                   WHERE x.lens_id = l.id AND x.entity_kind = 'asset')
                     ORDER BY l.id""", (row["id"],))
     return {"asset": a, "lenses": seen}
 
@@ -384,7 +389,7 @@ def config_file():
 
 
 def lens_objects():
-    """What each lens actually serves, derived from REACH — not a hand-kept list."""
+    """What each lens actually serves, derived from REACH, not a hand-kept list."""
     out = {}
     for entity, lens, call, ident, note in REACH:
         for lid in [x.strip() for x in lens.split("/")]:

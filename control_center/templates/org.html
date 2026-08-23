@@ -46,7 +46,7 @@
   <tr><td class="id"><a href="/org/person/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.full_name }}</td>
       <td class="dim">{{ r.department }}</td><td class="dim">{{ r.title }}</td>
       <td class="dim">{{ r.employment }}</td><td class="id dim">{{ r.started_on }}</td>
-      <td>{% if r.ended_on %}<span class="tag conflict">{{ r.ended_on }}</span>{% else %}<span class="dim">—</span>{% endif %}</td></tr>
+      <td>{% if r.ended_on %}<span class="tag conflict">{{ r.ended_on }}</span>{% else %}<span class="dim">-</span>{% endif %}</td></tr>
   {% endfor %}
 </table></div>
 
@@ -68,7 +68,7 @@
   {% for r in rows %}
   <tr><td class="id"><a href="/asset/{{ r.id }}">{{ r.id }}</a></td><td class="id">{{ r.hostname }}</td>
       <td class="id dim">{{ r.fqdn }}</td><td class="id dim">{{ r.asset_tag }}</td>
-      <td class="id dim">{{ r.ip }}</td><td>{{ r.kind }}</td><td class="dim">{{ r.owner_name or '—' }}</td></tr>
+      <td class="id dim">{{ r.ip }}</td><td>{{ r.kind }}</td><td class="dim">{{ r.owner_name or '-' }}</td></tr>
   {% endfor %}
 </table></div>
 
@@ -83,12 +83,12 @@
       <th class="num">Overdue</th><th class="num">Evidence</th><th>Owner</th></tr>
   {% for c in rows %}
   <tr><td class="id"><a href="/spine/control/{{ c.id }}">{{ c.ref }}</a></td><td>{{ c.title }}</td>
-      <td class="id dim">{{ c.last_tested_on or '—' }}</td>
+      <td class="id dim">{{ c.last_tested_on or '-' }}</td>
       <td>{% if not c.last_result %}<span class="void">never assessed</span>
           {% elif c.last_result == 'effective' and c.overdue_findings %}<span class="tag conflict">effective ⚠</span>
           {% else %}{{ c.last_result }}{% endif %}</td>
       <td class="num">{{ c.overdue_findings }}</td><td class="num">{{ c.evidence_rows }}</td>
-      <td class="dim">{{ c.owner_name or '—' }}{% if c.owner_ended_on %} <span class="tag conflict">left</span>{% endif %}</td></tr>
+      <td class="dim">{{ c.owner_name or '-' }}{% if c.owner_ended_on %} <span class="tag conflict">left</span>{% endif %}</td></tr>
   {% endfor %}
 </table></div>
 
@@ -98,7 +98,7 @@
   {% for s in rows %}
   <tr><td class="id"><a href="/spine/service/{{ s.id }}">{{ s.id }}</a></td><td>{{ s.name }}</td>
       <td>{{ s.criticality }}</td><td class="num">{{ "{:,.0f}".format(s.daily_revenue) }}</td>
-      <td class="dim">{{ s.owner_name or '—' }}</td></tr>
+      <td class="dim">{{ s.owner_name or '-' }}</td></tr>
   {% endfor %}
 </table></div>
 {% endif %}

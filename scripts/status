@@ -29,7 +29,7 @@ if command -v psql >/dev/null 2>&1; then
   n=$(psql "$DSN" -tAc "SELECT count(*) FROM world.asset" 2>/dev/null)
   if [ -n "$n" ]; then row "world-db" "up" "$n assets"; else row "world-db" "DOWN" "unreachable"; fail=1; fi
 else
-  # no psql on this host — ask the Control Center, which holds the only other
+  # no psql on this host, ask the Control Center, which holds the only other
   # connection to world-db, rather than reporting a state we have not checked
   det=$(curl -s -m 5 "$CC/healthz" 2>/dev/null | sed -n 's/.*"name":"world-db","state":"\([a-z]*\)","detail":"\([^"]*\)".*/\1 \2/p')
   if [ -n "$det" ]; then

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Restore a baseline. Seconds, not minutes — this is what makes world-state W1
-# -> posture P1 golden-file testing usable. (DESIGN.md §7)
+# Restore a baseline. Seconds, not minutes, this is what makes world-state W1
+# -> posture P1 golden-file testing usable. (DESIGN.md #7)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME="${1:-baseline}"

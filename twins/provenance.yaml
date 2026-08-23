@@ -1,4 +1,4 @@
-# Provenance manifest — DESIGN.md §5, "the standing hazard".
+# Provenance manifest. DESIGN.md #5, "the standing hazard".
 #
 # With no vendor product in the loop, every claim of correctness rests on twin
 # fidelity. Nothing in this environment can tell you we have misread a vendor's
@@ -61,7 +61,7 @@ grc:
   captured_on: null
   notes: >
     Entirely representative. GRC platforms are configured object models rather than
-    fixed schemas, so there is no single vendor shape to be faithful to — but that
+    fixed schemas, so there is no single vendor shape to be faithful to, but that
     also means this twin cannot be certified against one. Opaque base64 cursors and
     the {items, next_cursor, total} envelope are our convention, not a vendor's.
   endpoints:

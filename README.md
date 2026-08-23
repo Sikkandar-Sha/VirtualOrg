@@ -97,7 +97,7 @@ on `:8080`.
 
 Run your kit from your IDE with a debugger attached, pointed at
 `config/virtualorg/connectors.yaml`. The kit is deliberately not a compose service.
-See DESIGN.md §2 for why.
+See DESIGN.md #2 for why.
 
 ```bash
 docker compose --profile ci up -d      # CI: also runs the kit in-network
@@ -133,10 +133,10 @@ curl -s -H "Authorization: Bearer vo-dev-token" localhost:8080/_lens/splunk
 
 ## The domains
 
-DESIGN.md §3 names twelve domains and a day-one column. Everything it marks **Yes** or
+DESIGN.md #3 names twelve domains and a day-one column. Everything it marks **Yes** or
 **Thin** is built:
 
-| Domain | §3 | Built |
+| Domain | #3 | Built |
 |---|---|---|
 | People & org | Yes | people, departments, JML over three years, HR lens |
 | Identity & access | Thin | accounts, groups, membership with revocation, privileged flag |
@@ -150,7 +150,7 @@ DESIGN.md §3 names twelve domains and a day-one column. Everything it marks **Y
 
 ## Connector patterns covered
 
-Build for patterns, not brands (DESIGN.md §5). All seven are live:
+Build for patterns, not brands (DESIGN.md #5). All seven are live:
 
 | Pattern | Lens | The part that catches people |
 |---|---|---|
@@ -176,7 +176,7 @@ curl -s -H "$H" localhost:8080/grc/api/v1/frameworks
 curl -s -H "$H" 'localhost:8080/grc/api/v1/crosswalks?limit=5'
 ```
 
-That is what makes mapping strength mandatory rather than a nicety (DESIGN.md §10): the
+That is what makes mapping strength mandatory rather than a nicety (DESIGN.md #10): the
 same control failure moves ISO and CSF by different amounts, and you can say why.
 
 ## Binary evidence
@@ -194,7 +194,7 @@ the same attachment is byte-identical on every run.
 ## Customer profiles
 
 The same twin serves three schema shapes, because in this market the schema is defined
-by the customer, not the vendor (DESIGN.md §5).
+by the customer, not the vendor (DESIGN.md #5).
 
 ```bash
 H='Authorization: Bearer vo-dev-token'
@@ -284,7 +284,7 @@ the same bar it holds the kit to.
 
 ## Control Center
 
-The browsable specification of the enterprise (DESIGN.md §8). Every pixel is generated
+The browsable specification of the enterprise (DESIGN.md #8). Every pixel is generated
 from world-db and the twins, so it cannot drift from what the kit actually reads.
 
 ```bash
@@ -343,7 +343,7 @@ the pattern a connector uses.
 
 ## The chaos dial
 
-The dial lives in the lens loss profiles, never in the world (DESIGN.md §4.4).
+The dial lives in the lens loss profiles, never in the world (DESIGN.md #4.4).
 
 ```bash
 python3 world/generate.py --seed 48392 --as-of 2026-08-21 --chaos 2
@@ -388,7 +388,7 @@ two different things. Self-hosted customers hit exactly this.
 
 With no vendor product in the loop, all correctness confidence rests on twin fidelity.
 Nothing here can tell you the connector has misread a vendor's pagination: connector
-and twin will be wrong together, forever, in green CI (DESIGN.md §5).
+and twin will be wrong together, forever, in green CI (DESIGN.md #5).
 
 Every twin therefore carries a provenance manifest in `twins/provenance.yaml`,
 served live and surfaced on the Control Center status board:
@@ -408,7 +408,7 @@ either agrees with the vendor. Paying that down is Phase 4.
 - **Phase 4 certification** against real vendor tenants, plus schema-drift canaries.
   This is the only thing that moves a lens off `unverified`, and it needs vendor
   developer tenants rather than more code.
-- The domains DESIGN.md §3 marks *Later*: third parties, data classification, change
+- The domains DESIGN.md #3 marks *Later*: third parties, data classification, change
   management, and financial impact. Deferred by the design, not outstanding.
 - Surface 5's "vs actual" column stays empty until a kit is pointed at this world and
   its output is loaded. The Control Center computes nothing itself, by rule.
@@ -416,7 +416,7 @@ either agrees with the vendor. Paying that down is Phase 4.
 ## Known gaps
 
 - The ServiceNow lens returns `name` and `fqdn` as the same value for computers. The
-  hostname form is exposed by the scanner lens, so the identifier clash in DESIGN.md §8
+  hostname form is exposed by the scanner lens, so the identifier clash in DESIGN.md #8
   is now real, but ServiceNow itself still duplicates one value into two fields.
 - The IdP shows only accounts federated to it. AD-only accounts, including some
   orphaned ones, are invisible by design. A kit should say so rather than report clean.

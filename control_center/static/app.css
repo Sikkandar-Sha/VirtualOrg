@@ -2,15 +2,15 @@
    ────────────────────────────────────────────────────────────────────────────
    A published specification, not a dashboard. Three voices, each with one job:
 
-     serif  the institutional voice — titles, section heads, stated conclusions
-     sans   apparatus — labels, table headers, navigation, controls
-     mono   data — identifiers and figures, always tabular
+     serif  the institutional voice, titles, section heads, stated conclusions
+     sans   apparatus, labels, table headers, navigation, controls
+     mono   data, identifiers and figures, always tabular
 
    The alignment rule everything else follows: a cell carries either data or
    prose, never both. Where both are needed they become separate columns, so
    digits line up on digits and identifiers never wrap mid-token.
 
-   Absence keeps its own material — a hatched void — because for a
+   Absence keeps its own material, a hatched void, because for a
    single-source-of-truth product silence must be distinguishable from health. */
 
 :root {
@@ -376,5 +376,14 @@ details.tbl > .wrap { padding: 4px 0 20px 196px; margin-top: 0; }
 /* payloads wrap rather than run off the frame; long identifiers still break cleanly */
 .exchange pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* a stated caveat is not a stated conclusion — it gets the warning rule */
+/* a stated caveat is not a stated conclusion, it gets the warning rule */
 .verdict.warn { border-left-color: var(--flag); }
+
+/* small caps label inside diagrams, for the category and section markers */
+.dgm .d-cat {
+  font: 500 9px/1 var(--ui); letter-spacing: .13em;
+  text-transform: uppercase; fill: var(--ink-3);
+}
+
+/* the smallest label size, for sequence-diagram step text */
+.dgm .d-sm { font-family: var(--mono); font-size: 9.5px; fill: var(--ink-2); }

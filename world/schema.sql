@@ -1,4 +1,4 @@
--- VirtualOrg — world state.
+-- VirtualOrg, world state.
 -- The world is always TRUE and COMPLETE. Loss lives in lens_visibility, never here.
 
 DROP SCHEMA IF EXISTS world CASCADE;
@@ -145,7 +145,7 @@ CREATE TABLE control (
   automated       boolean NOT NULL DEFAULT false
 );
 
--- coverage strength, NOT a boolean link (§4.2)
+-- coverage strength, NOT a boolean link (#4.2)
 CREATE TABLE control_mapping (
   control_id     text NOT NULL REFERENCES control(id),
   requirement_id text NOT NULL REFERENCES requirement(id),
@@ -154,7 +154,7 @@ CREATE TABLE control_mapping (
 );
 
 -- Crosswalks are imperfect on purpose: two frameworks rarely say the same thing,
--- and pretending they do is how a control failure moves the wrong number. (§4.2)
+-- and pretending they do is how a control failure moves the wrong number. (#4.2)
 CREATE TABLE requirement_crosswalk (
   source_requirement_id text NOT NULL REFERENCES requirement(id),
   target_requirement_id text NOT NULL REFERENCES requirement(id),
@@ -218,7 +218,7 @@ CREATE TABLE finding (
 );
 
 -- Binary evidence. The bytes are generated on read; the world stores only the
--- metadata a GRC platform would hold. (§5 "binary evidence retrieval")
+-- metadata a GRC platform would hold. (#5 "binary evidence retrieval")
 CREATE TABLE attachment (
   id          text PRIMARY KEY,
   finding_id  text NOT NULL REFERENCES finding(id),
@@ -312,7 +312,7 @@ CREATE TABLE misconfiguration (
   remediated_on date
 );
 
--- ---------- evidence: the ground-truth attribution layer (§7 Attribution) ----------
+-- ---------- evidence: the ground-truth attribution layer (#7 Attribution) ----------
 CREATE TABLE evidence (
   id          text PRIMARY KEY,
   kind        text NOT NULL CHECK (kind IN ('alert','control_test','finding','incident','vulnerability')),
@@ -323,7 +323,7 @@ CREATE TABLE evidence (
   is_trap     boolean NOT NULL DEFAULT false          -- topically related, NOT evidence
 );
 
--- ---------- lenses: where all loss lives (§5) ----------
+-- ---------- lenses: where all loss lives (#5) ----------
 CREATE TABLE lens (
   id               text PRIMARY KEY,
   vendor           text NOT NULL,
@@ -345,7 +345,7 @@ CREATE TABLE lens_visibility (
   PRIMARY KEY (lens_id, entity_kind, entity_id)
 );
 
--- ---------- ground truth: the assertion catalogue, materialised (§7) ----------
+-- ---------- ground truth: the assertion catalogue, materialised (#7) ----------
 CREATE TABLE expectation (
   id          text PRIMARY KEY,
   family      text NOT NULL CHECK (family IN ('attribution','conflict','degradation','absence')),

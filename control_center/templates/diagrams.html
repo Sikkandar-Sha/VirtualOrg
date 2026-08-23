@@ -1,68 +1,71 @@
-{# Inline SVG. No external assets, no libraries — colours come from the same CSS
+{# Inline SVG. No external assets, no libraries. Colours come from the same CSS
    custom properties as the rest of the page, so every diagram themes with it. #}
 
-{% macro world_and_lenses(inv, rows) %}
-{# Geometry derives from the number of lenses. Hard-coding it for three is how the
-   diagram silently overflowed the moment a fourth and fifth were added. #}
-{% set n = rows | length %}
-{% set top = 16 %}{% set step = 124 %}{% set boxh = 100 %}
-{% set last = top + (n - 1) * step + boxh %}
-{% set svgh = last + 46 %}
-{% set mid = ((top + last) / 2) | int %}
-<svg viewBox="0 0 900 {{ svgh }}" class="dgm" role="img"
-     aria-label="One world in a database, projected through {{ n }} lossy lenses into {{ n }} vendor APIs, each serving a named set of object types, consumed by your kit">
+{% macro world_and_lenses(inv, rows, g) %}
+{# Every coordinate comes from `g`, computed in app.py from the wrapped text, so a
+   box is exactly as tall as its contents and nothing is truncated to make it fit.
+   Connectors are orthogonal: a trunk and right angles read as a schematic, where
+   seven long diagonals read as a scribble. #}
+<svg viewBox="0 0 900 {{ g.svg_h }}" class="dgm" role="img"
+     aria-label="One database projected through {{ rows | length }} lossy vendor lenses into your kit">
   <defs>
-    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="var(--rule-2)"/>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
+      <path d="M0,0 L0,5 L7,2.5 z" fill="var(--rule-2)"/>
     </marker>
-    <pattern id="hatch" width="6" height="6" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
-      <line x1="0" y1="0" x2="0" y2="6" stroke="var(--void)" stroke-width="1.4" opacity=".5"/>
+    <pattern id="hatch" width="5" height="5" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="5" stroke="var(--void)" stroke-width="1.2" opacity=".55"/>
     </pattern>
   </defs>
 
+  {% set trunk = 214 %}{% set glyph = 244 %}{% set out = 648 %}{% set kit = 700 %}
+
   <!-- the world -->
-  <ellipse cx="98" cy="{{ mid - 32 }}" rx="58" ry="16" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
-  <path d="M40,{{ mid - 32 }} v66 a58,16 0 0 0 116,0 v-66" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
-  <ellipse cx="98" cy="{{ mid + 34 }}" rx="58" ry="16" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity=".45"/>
-  <text x="98" y="{{ mid - 2 }}" class="d-t d-mid" fill="var(--accent)">world-db</text>
-  <text x="98" y="{{ mid + 16 }}" class="d-s d-mid">complete · true</text>
-
-  {% set lines = [
-      inv.people ~ ' people · ' ~ inv.assets ~ ' assets',
-      inv.applications ~ ' applications · ' ~ inv.services ~ ' business services',
-      inv.controls ~ ' controls · 3 years of history'] %}
-  {% for line in lines %}
-    <text x="98" y="{{ mid + 74 + loop.index0 * 16 }}" class="d-s d-mid">{{ line }}</text>
+  <ellipse cx="84" cy="{{ g.mid - 30 }}" rx="56" ry="15" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+  <path d="M28,{{ g.mid - 30 }} v60 a56,15 0 0 0 112,0 v-60" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+  <ellipse cx="84" cy="{{ g.mid + 30 }}" rx="56" ry="15" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity=".4"/>
+  <text x="84" y="{{ g.mid - 6 }}" class="d-t d-mid" fill="var(--accent)">world-db</text>
+  <text x="84" y="{{ g.mid + 10 }}" class="d-s d-mid">complete · true</text>
+  {% set facts = [inv.people ~ ' people · ' ~ inv.assets ~ ' assets',
+                  inv.applications ~ ' applications · ' ~ inv.services ~ ' services',
+                  inv.controls ~ ' controls · 3 years'] %}
+  {% for f in facts %}
+    <text x="84" y="{{ g.mid + 66 + loop.index0 * 15 }}" class="d-s d-mid">{{ f }}</text>
   {% endfor %}
-  <text x="98" y="{{ mid + 142 }}" class="d-s d-mid" fill="var(--ink-3)">every entity, once, truthfully</text>
 
-  <!-- lenses: box contents wrapped on word boundaries, three lines max -->
+  <!-- trunk: one vertical spine, right angles out to each lens -->
+  <line x1="140" y1="{{ g.mid }}" x2="{{ trunk }}" y2="{{ g.mid }}" stroke="var(--rule-2)"/>
+  <line x1="{{ trunk }}" y1="{{ rows[0].mid }}" x2="{{ trunk }}" y2="{{ rows[-1].mid }}" stroke="var(--rule-2)"/>
+  <line x1="{{ out }}" y1="{{ rows[0].mid }}" x2="{{ out }}" y2="{{ rows[-1].mid }}" stroke="var(--rule-2)"/>
+  <line x1="{{ out }}" y1="{{ g.mid }}" x2="{{ kit - 6 }}" y2="{{ g.mid }}" stroke="var(--rule-2)" marker-end="url(#ar)"/>
+
   {% for l in rows %}
-    {% set y = top + loop.index0 * step %}
-    {% set c = y + 50 %}
-    <line x1="160" y1="{{ mid }}" x2="315" y2="{{ c }}" stroke="var(--rule-2)" stroke-width="1" marker-end="url(#ar)"/>
-    <polygon points="325,{{ c - 28 }} 380,{{ c }} 325,{{ c + 28 }}" fill="url(#hatch)"
-             stroke="var(--rule-2)" stroke-width="1.2"/>
-    <text x="350" y="{{ c + 4 }}" class="d-s d-mid" fill="var(--ink-3)">lens</text>
-    <line x1="383" y1="{{ c }}" x2="472" y2="{{ c }}" stroke="var(--rule-2)" stroke-width="1" marker-end="url(#ar)"/>
+    <line x1="{{ trunk }}" y1="{{ l.mid }}" x2="{{ glyph - 4 }}" y2="{{ l.mid }}" stroke="var(--rule-2)"/>
+    <polygon points="{{ glyph }},{{ l.mid - 13 }} {{ glyph + 26 }},{{ l.mid }} {{ glyph }},{{ l.mid + 13 }}"
+             fill="url(#hatch)" stroke="var(--rule-2)" stroke-width="1.1"/>
+    <line x1="{{ glyph + 26 }}" y1="{{ l.mid }}" x2="{{ g.box_x - 6 }}" y2="{{ l.mid }}"
+          stroke="var(--rule-2)" marker-end="url(#ar)"/>
 
-    <rect x="482" y="{{ y }}" width="256" height="{{ boxh }}" fill="var(--card)" stroke="var(--rule-2)"/>
-    <text x="496" y="{{ y + 23 }}" class="d-t">{{ l.vendor }}</text>
-    <text x="{{ 500 + (l.vendor|length * 8) }}" y="{{ y + 23 }}" class="d-s" fill="var(--ink-3)">{{ l.cat }}</text>
-    <text x="496" y="{{ y + 42 }}" class="d-s" fill="var(--ink-2)">{{ l.cov }}% cover · by {{ l.ident }} · {{ l.sync }} behind</text>
-    <text x="496" y="{{ y + 63 }}" class="d-s" fill="var(--accent)">serves</text>
-    {% for line in l.object_lines %}
-      <text x="{{ 538 if loop.first else 496 }}" y="{{ y + 63 + loop.index0 * 15 }}" class="d-s">{{ line }}</text>
+    <rect x="{{ g.box_x }}" y="{{ l.y }}" width="{{ g.box_w }}" height="{{ l.h }}"
+          rx="3" fill="var(--card)" stroke="var(--rule-2)"/>
+    <text x="{{ g.box_x + 14 }}" y="{{ l.y + g.pad_t + 12 }}" class="d-t">{{ l.vendor }}</text>
+    <text x="{{ g.box_x + g.box_w - 14 }}" y="{{ l.y + g.pad_t + 12 }}" class="d-cat" text-anchor="end">{{ l.cat }}</text>
+    <text x="{{ g.box_x + 14 }}" y="{{ l.y + g.pad_t + g.h_vendor + 12 }}" class="d-id">{{ l.loss }}</text>
+    <text x="{{ g.box_x + 14 }}" y="{{ l.y + g.pad_t + g.h_vendor + g.h_loss + 12 }}" class="d-cat">Serves</text>
+    {% for line in l.lines %}
+      <text x="{{ g.box_x + 14 }}"
+            y="{{ l.y + g.pad_t + g.h_vendor + g.h_loss + g.h_label + 11 + loop.index0 * g.h_line }}"
+            class="d-id">{{ line }}</text>
     {% endfor %}
 
-    <line x1="740" y1="{{ c }}" x2="806" y2="{{ c }}" stroke="var(--rule-2)" stroke-width="1" marker-end="url(#ar)"/>
+    <line x1="{{ g.box_x + g.box_w }}" y1="{{ l.mid }}" x2="{{ out }}" y2="{{ l.mid }}" stroke="var(--rule-2)"/>
   {% endfor %}
 
-  <rect x="814" y="{{ top }}" width="74" height="{{ last - top }}" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
-  <text x="851" y="{{ mid - 6 }}" class="d-t d-mid" fill="var(--accent)">your</text>
-  <text x="851" y="{{ mid + 12 }}" class="d-t d-mid" fill="var(--accent)">kit</text>
+  <rect x="{{ kit }}" y="{{ g.mid - 34 }}" width="150" height="68" rx="3"
+        fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="{{ kit + 75 }}" y="{{ g.mid - 4 }}" class="d-t d-mid" fill="var(--accent)">your kit</text>
+  <text x="{{ kit + 75 }}" y="{{ g.mid + 14 }}" class="d-s d-mid">one config file</text>
 
-  <text x="450" y="{{ svgh - 16 }}" class="d-s d-mid" fill="var(--ink-3)">{{ n }} lenses — not {{ inv.applications }} applications. The applications are entities inside the modelled enterprise; the ServiceNow lens catalogues them.</text>
+  <text x="450" y="{{ g.svg_h - 14 }}" class="d-s d-mid" fill="var(--ink-3)">{{ rows | length }} lenses, not {{ inv.applications }} applications. The applications are entities inside the modelled enterprise; the ServiceNow lens catalogues them.</text>
 </svg>
 {% endmacro %}
 
@@ -71,7 +74,7 @@
 <svg viewBox="0 0 900 300" class="dgm" role="img"
      aria-label="Container layout: world-db, world-engine, twin-gateway, control-center, keycloak and wiremock, with the kit outside compose">
   <rect x="14" y="14" width="640" height="230" fill="none" stroke="var(--rule)" stroke-dasharray="4 4"/>
-  <text x="26" y="34" class="d-s" fill="var(--ink-2)">docker compose — “virtualorg”</text>
+  <text x="26" y="34" class="d-s" fill="var(--ink-2)">docker compose · “virtualorg”</text>
 
   <rect x="34" y="52" width="150" height="60" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
   <text x="48" y="76" class="d-t" fill="var(--accent)">world-db</text>
@@ -116,106 +119,138 @@
 
 
 {% macro spine() %}
-<svg viewBox="0 0 900 290" class="dgm" role="img"
-     aria-label="The spine: framework to requirement to control to evidence to asset to service, with risk attached">
-  {% set nodes = [(20,'Framework'), (150,'Requirement'), (285,'Control'),
-                  (415,'Evidence'), (545,'Asset / App'), (690,'Service')] %}
-  {% for x, label in nodes %}
-    <rect x="{{ x }}" y="86" width="{{ 118 if label != 'Asset / App' else 122 }}" height="46"
-          fill="var(--card)" stroke="{{ 'var(--accent)' if label in ['Control','Evidence'] else 'var(--rule-2)' }}"
-          stroke-width="{{ 1.6 if label in ['Control','Evidence'] else 1 }}"/>
-    <text x="{{ x + 59 }}" y="114" class="d-t d-mid"
-          fill="{{ 'var(--accent)' if label in ['Control','Evidence'] else 'var(--ink)' }}">{{ label }}</text>
+{# The full chain DESIGN.md draws, Process included now that it exists. Node
+   positions are computed from the count, so adding a hop cannot push the last box
+   off the canvas. #}
+{% set nodes = ['Framework', 'Requirement', 'Control', 'Evidence', 'Asset / App', 'Service', 'Process'] %}
+{% set w = 110 %}{% set gap = 17 %}{% set x0 = 16 %}{% set row = 150 %}{% set h = 46 %}
+<svg viewBox="0 0 900 330" class="dgm" role="img"
+     aria-label="The spine: framework to requirement to control to evidence to asset to service to business process, with risk mitigated by controls and threatening services">
+  <defs>
+    <marker id="ar3" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
+      <path d="M0,0 L0,5 L7,2.5 z" fill="var(--rule-2)"/>
+    </marker>
+  </defs>
+
+  <text x="450" y="34" class="d-s d-mid" fill="var(--ink-2)">Nothing in any vendor API links a detection to a control. That join is the kit's job,</text>
+  <text x="450" y="50" class="d-s d-mid" fill="var(--ink-2)">and the thing most likely to be wrong in a way nobody notices.</text>
+
+  {% for n in nodes %}
+    {% set x = x0 + loop.index0 * (w + gap) %}
+    {% set key = n in ['Control', 'Evidence'] %}
+    <rect x="{{ x }}" y="{{ row }}" width="{{ w }}" height="{{ h }}" rx="3"
+          fill="var(--card)" stroke="{{ 'var(--accent)' if key else 'var(--rule-2)' }}"
+          stroke-width="{{ 1.6 if key else 1 }}"/>
+    <text x="{{ x + w // 2 }}" y="{{ row + 28 }}" class="d-t d-mid"
+          fill="{{ 'var(--accent)' if key else 'var(--ink)' }}">{{ n }}</text>
     {% if not loop.last %}
-      <line x1="{{ x + 120 }}" y1="109" x2="{{ nodes[loop.index][0] - 4 }}" y2="109"
-            stroke="var(--rule-2)" marker-end="url(#ar)"/>
+      <line x1="{{ x + w }}" y1="{{ row + h // 2 }}" x2="{{ x + w + gap - 3 }}" y2="{{ row + h // 2 }}"
+            stroke="var(--rule-2)" marker-end="url(#ar3)"/>
     {% endif %}
   {% endfor %}
 
-  <rect x="20" y="52" width="118" height="0" fill="none"/>
-  <text x="344" y="72" class="d-s d-mid" fill="var(--ink-2)">coverage strength</text>
-  <text x="474" y="72" class="d-s d-mid" fill="var(--ink-2)">from the lenses</text>
+  {% set ctl = x0 + 2 * (w + gap) + w // 2 %}
+  {% set svc = x0 + 5 * (w + gap) + w // 2 %}
+  <text x="{{ x0 + 1.5 * (w + gap) + w // 2 }}" y="{{ row - 12 }}" class="d-cat d-mid">coverage strength</text>
+  <text x="{{ x0 + 3.5 * (w + gap) + w // 2 }}" y="{{ row - 12 }}" class="d-cat d-mid">from the lenses</text>
 
-  <rect x="345" y="196" width="180" height="46" fill="var(--card)" stroke="var(--flag)" stroke-width="1.4"/>
-  <text x="435" y="224" class="d-t d-mid" fill="var(--flag)">Risk</text>
-  <line x1="344" y1="196" x2="344" y2="136" stroke="var(--rule-2)" stroke-dasharray="3 3"/>
-  <text x="256" y="170" class="d-s" fill="var(--ink-2)">mitigated by</text>
-  <line x1="526" y1="212" x2="690" y2="212" stroke="var(--rule-2)" stroke-dasharray="3 3"/>
-  <line x1="750" y1="212" x2="750" y2="136" stroke="var(--rule-2)" stroke-dasharray="3 3" marker-end="url(#ar)"/>
-  <text x="556" y="204" class="d-s" fill="var(--ink-2)">threatens</text>
+  <!-- risk sits below, joined by right angles to the two hops it touches -->
+  <rect x="{{ ctl - 60 }}" y="252" width="120" height="44" rx="3"
+        fill="var(--card)" stroke="var(--flag)" stroke-width="1.4"/>
+  <text x="{{ ctl }}" y="279" class="d-t d-mid" fill="var(--flag)">Risk</text>
 
-  <text x="450" y="30" class="d-s d-mid" fill="var(--ink-2)">Nothing in any vendor API links a detection to a control. That join is the kit's job — and the thing most likely to be wrong in a way nobody notices.</text>
-  <text x="450" y="274" class="d-s d-mid" fill="var(--ink-2)">All four of the kit's outputs are traversals of this one graph.</text>
+  <line x1="{{ ctl }}" y1="252" x2="{{ ctl }}" y2="{{ row + h + 4 }}"
+        stroke="var(--rule-2)" stroke-dasharray="3 3" marker-end="url(#ar3)"/>
+  <text x="{{ ctl - 10 }}" y="228" class="d-cat" text-anchor="end">mitigated by</text>
+
+  <line x1="{{ ctl + 60 }}" y1="274" x2="{{ svc }}" y2="274" stroke="var(--rule-2)" stroke-dasharray="3 3"/>
+  <line x1="{{ svc }}" y1="274" x2="{{ svc }}" y2="{{ row + h + 4 }}"
+        stroke="var(--rule-2)" stroke-dasharray="3 3" marker-end="url(#ar3)"/>
+  <text x="{{ ctl + 72 }}" y="268" class="d-cat">threatens</text>
+
+  <text x="450" y="320" class="d-s d-mid" fill="var(--ink-3)">All four of the kit's outputs are traversals of this one graph.</text>
 </svg>
 {% endmacro %}
 
 
-{% macro patterns() %}
-<svg viewBox="0 0 900 330" class="dgm" role="img"
-     aria-label="Three connector call patterns: offset pagination, asynchronous search job, and cursor pagination">
-  {% for col, title, sub in [(0,'Offset pagination','ServiceNow'),
-                             (305,'Async search job','Splunk'),
-                             (610,'Cursor pagination','GRC')] %}
-    <text x="{{ col + 10 }}" y="22" class="d-t">{{ title }}</text>
-    <text x="{{ col + 10 }}" y="40" class="d-s" fill="var(--ink-2)">{{ sub }}</text>
-    <line x1="{{ col + 40 }}" y1="56" x2="{{ col + 40 }}" y2="300" stroke="var(--rule)"/>
-    <line x1="{{ col + 230 }}" y1="56" x2="{{ col + 230 }}" y2="300" stroke="var(--rule)"/>
-    <text x="{{ col + 40 }}" y="{{ 52 }}" class="d-s d-mid" fill="var(--ink-2)">kit</text>
-    <text x="{{ col + 230 }}" y="{{ 52 }}" class="d-s d-mid" fill="var(--ink-2)">twin</text>
+{% macro patterns(rows) %}
+{# A computed grid rather than three fixed columns. Every pattern the twins serve
+   gets a cell, so adding a lens cannot leave the diagram quietly showing a subset. #}
+{% set cols = 4 %}{% set cw = 200 %}{% set gap = 18 %}{% set x0 = 16 %}
+{% set rh = 186 %}{% set y0 = 26 %}
+{% set nrows = ((rows | length) + cols - 1) // cols %}
+<svg viewBox="0 0 900 {{ y0 + nrows * rh + 10 }}" class="dgm" role="img"
+     aria-label="The {{ rows | length }} connector call patterns the twins serve, each as a request and response sequence">
+  <defs>
+    <marker id="ar4" markerWidth="7" markerHeight="7" refX="6" refY="2.2" orient="auto">
+      <path d="M0,0 L0,4.4 L6,2.2 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  {% for p in rows %}
+    {% set col = loop.index0 % cols %}{% set row = loop.index0 // cols %}
+    {% set x = x0 + col * (cw + gap) %}{% set y = y0 + row * rh %}
+    <text x="{{ x }}" y="{{ y }}" class="d-t">{{ p[0] }}</text>
+    <text x="{{ x }}" y="{{ y + 15 }}" class="d-cat">{{ p[1] }}</text>
+    {# two lifelines, kit on the left, twin on the right #}
+    <line x1="{{ x + 8 }}" y1="{{ y + 34 }}" x2="{{ x + 8 }}" y2="{{ y + rh - 34 }}" stroke="var(--rule)"/>
+    <line x1="{{ x + cw - 8 }}" y1="{{ y + 34 }}" x2="{{ x + cw - 8 }}" y2="{{ y + rh - 34 }}" stroke="var(--rule)"/>
+    <text x="{{ x + 8 }}" y="{{ y + 30 }}" class="d-cat">kit</text>
+    <text x="{{ x + cw - 8 }}" y="{{ y + 30 }}" class="d-cat" text-anchor="end">twin</text>
+    {% for step in p[2] %}
+      {% set sy = y + 50 + loop.index0 * 44 %}
+      <line x1="{{ x + 8 }}" y1="{{ sy }}" x2="{{ x + cw - 12 }}" y2="{{ sy }}"
+            stroke="var(--accent)" marker-end="url(#ar4)"/>
+      <text x="{{ x + 10 }}" y="{{ sy - 5 }}" class="d-sm">{{ step[0] }}</text>
+      <line x1="{{ x + cw - 8 }}" y1="{{ sy + 18 }}" x2="{{ x + 12 }}" y2="{{ sy + 18 }}"
+            stroke="var(--rule-2)" stroke-dasharray="3 3" marker-end="url(#ar4)"/>
+      <text x="{{ x + 10 }}" y="{{ sy + 13 }}" class="d-sm" fill="var(--ink-3)">{{ step[1] }}</text>
+    {% endfor %}
   {% endfor %}
-
-  {% macro step(col, y, label, back) %}
-    <line x1="{{ col + 40 }}" y1="{{ y }}" x2="{{ col + 226 }}" y2="{{ y }}"
-          stroke="var(--accent)" marker-end="url(#ar)"/>
-    <text x="{{ col + 44 }}" y="{{ y - 6 }}" class="d-s">{{ label }}</text>
-    {% if back %}
-      <line x1="{{ col + 230 }}" y1="{{ y + 22 }}" x2="{{ col + 44 }}" y2="{{ y + 22 }}"
-            stroke="var(--rule-2)" stroke-dasharray="3 3" marker-end="url(#ar)"/>
-      <text x="{{ col + 48 }}" y="{{ y + 16 }}" class="d-s" fill="var(--ink-2)">{{ back }}</text>
-    {% endif %}
-  {% endmacro %}
-
-  {{ step(0, 86, 'GET ?sysparm_offset=0', '200 · X-Total-Count') }}
-  {{ step(0, 156, 'GET ?sysparm_offset=100', '200 · next 100') }}
-  {{ step(0, 226, 'GET ?sysparm_offset=200', '200 · fewer than limit → stop') }}
-
-  {{ step(305, 86, 'POST /jobs  search=…', '201 · {sid}') }}
-  {{ step(305, 156, 'GET /jobs/{sid}', 'RUNNING · never done first poll') }}
-  {{ step(305, 226, 'GET /jobs/{sid}', 'DONE · resultCount') }}
-  {{ step(305, 280, 'GET /jobs/{sid}/results', '200 · rows') }}
-
-  {{ step(610, 86, 'GET ?limit=50', '200 · next_cursor') }}
-  {{ step(610, 156, 'GET ?cursor=…', '200 · next_cursor') }}
-  {{ step(610, 226, 'GET ?cursor=…', '200 · next_cursor: null → stop') }}
 </svg>
 {% endmacro %}
 
 
 {% macro correlation(a, lenses) %}
-<svg viewBox="0 0 900 300" class="dgm" role="img"
-     aria-label="One machine named differently by each of {{ lenses | length }} lenses, with no shared identifier between them">
-  <rect x="330" y="18" width="240" height="58" fill="var(--card)" stroke="var(--accent)" stroke-width="1.6"/>
-  <text x="450" y="42" class="d-t d-mid" fill="var(--accent)">{{ a.id }}</text>
-  <text x="450" y="62" class="d-s d-mid">one machine in the world</text>
+{# A register, read top to bottom: the machine, then one row per lens that tracks
+   assets. Rows grow downwards, so this holds at any number of lenses and at any
+   identifier length, neither of which the old fixed-pitch row of boxes did. #}
+{% set n = lenses | length %}
+{% set head = 132 %}{% set top = 168 %}{% set pitch = 38 %}
+{% set svgh = top + (n - 1) * pitch + 78 %}
+<svg viewBox="0 0 900 {{ svgh }}" class="dgm" role="img"
+     aria-label="One machine named differently by each of {{ n }} asset-tracking lenses, with no shared identifier between them">
+
+  <rect x="330" y="20" width="240" height="52" rx="3" fill="var(--card)"
+        stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="450" y="43" class="d-t d-mid" fill="var(--accent)">{{ a.id }}</text>
+  <text x="450" y="60" class="d-s d-mid">one machine in the world</text>
+  <line x1="450" y1="72" x2="450" y2="{{ head - 30 }}" stroke="var(--rule-2)"/>
+
+  <text x="60"  y="{{ head }}" class="d-cat">Source</text>
+  <text x="240" y="{{ head }}" class="d-cat">Calls it</text>
+  <text x="700" y="{{ head }}" class="d-cat">Identifier</text>
+  <line x1="60" y1="{{ head + 12 }}" x2="840" y2="{{ head + 12 }}" stroke="var(--rule-2)"/>
 
   {% for l in lenses %}
-    {% set x = 40 + loop.index0 * 290 %}
-    <line x1="450" y1="78" x2="{{ x + 110 }}" y2="140" stroke="var(--rule-2)" marker-end="url(#ar)"/>
-    <rect x="{{ x }}" y="146" width="220" height="76"
-          fill="{{ 'var(--card)' if l.external_id else 'none' }}"
-          stroke="{{ 'var(--rule-2)' if l.external_id else 'var(--void)' }}"
-          stroke-dasharray="{{ '' if l.external_id else '4 3' }}"/>
-    <text x="{{ x + 14 }}" y="170" class="d-t">{{ l.vendor }}</text>
+    {% set y = top + loop.index0 * pitch %}
+    <text x="60" y="{{ y }}" class="d-t">{{ l.vendor }}</text>
     {% if l.external_id %}
-      <text x="{{ x + 14 }}" y="194" class="d-id" fill="var(--accent)">{{ l.external_id }}</text>
-      <text x="{{ x + 14 }}" y="212" class="d-s" fill="var(--ink-2)">names it by {{ l.identifier_style }}</text>
+      <text x="240" y="{{ y }}" class="d-id" fill="var(--accent)">{{ l.external_id }}</text>
+      <text x="700" y="{{ y }}" class="d-s">by {{ l.identifier_style }}</text>
     {% else %}
-      <text x="{{ x + 14 }}" y="194" class="d-s" fill="var(--void)">NOT VISIBLE</text>
-      <text x="{{ x + 14 }}" y="212" class="d-s" fill="var(--void)">structurally blind to it</text>
+      <rect x="240" y="{{ y - 12 }}" width="400" height="18" fill="url(#hatch)"
+            stroke="var(--void)" stroke-width="0.8"/>
+      <text x="250" y="{{ y - 1 }}" class="d-cat" fill="var(--void)">not visible to this lens</text>
+      <text x="700" y="{{ y }}" class="d-s" fill="var(--void)">{{ l.identifier_style }}</text>
+    {% endif %}
+    {% if not loop.last %}
+      <line x1="60" y1="{{ y + pitch // 2 - 4 }}" x2="840" y2="{{ y + pitch // 2 - 4 }}"
+            stroke="var(--rule)" opacity=".6"/>
     {% endif %}
   {% endfor %}
 
-  <text x="450" y="262" class="d-s d-mid" fill="var(--ink-2)">No two of these strings match. Nothing in any response says they are the same machine.</text>
-  <text x="450" y="282" class="d-s d-mid" fill="var(--flag)">Resolving them is the kit's first job — and IPs are recycled, so the IP alone is not a key.</text>
+  <line x1="60" y1="{{ top + (n - 1) * pitch + 16 }}" x2="840" y2="{{ top + (n - 1) * pitch + 16 }}" stroke="var(--rule-2)"/>
+  <text x="450" y="{{ svgh - 38 }}" class="d-s d-mid" fill="var(--ink-3)">No two of these strings match. Nothing in any response says they are the same machine.</text>
+  <text x="450" y="{{ svgh - 18 }}" class="d-s d-mid" fill="var(--flag)">Resolving them is the kit's first job, and IPs are recycled, so the IP alone is not a key.</text>
 </svg>
 {% endmacro %}

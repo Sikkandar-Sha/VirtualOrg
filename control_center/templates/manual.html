@@ -4,7 +4,7 @@
 {% block body %}
 <div class="eyebrow">Surface 7 · manual</div>
 <h1>How VirtualOrg works, and how to connect to it</h1>
-<p class="lede">Everything factual on this page is generated — table and column names from
+<p class="lede">Everything factual on this page is generated: table and column names from
   <code>information_schema</code>, row counts from the tables, the endpoint list from the
   twin's own route table, and every example payload from a real call to the running twin.
   Only the explanations are written by hand. A manual that is generated cannot drift from
@@ -21,14 +21,14 @@
 <h2>One world, many lenses</h2>
 <p class="note">An enterprise is not its tools. Every enterprise tool is a partial, lossy,
   opinionated view of one underlying organisation. VirtualOrg models the organisation once,
-  completely and truthfully, in a single database — and every tool your kit connects to is a
+  completely and truthfully, in a single database, and every tool your kit connects to is a
   <b>lens</b> over it, with a scope, a loss profile, and an API shape.</p>
-{{ d.world_and_lenses(inventory, lens_rows) }}
+{{ d.world_and_lenses(inventory, lens_rows, geom) }}
 
 <div class="verdict">
   <div class="eyebrow">A word that trips everyone up</div>
   <p><b>“Application” here means a business application belonging to the simulated
-    company</b> — “Nexus Sync 1”, “Edge Service 2” — not a running program and not a
+    company</b>, “Nexus Sync 1”, “Edge Service 2”, not a running program and not a
     vendor tool. There are {{ inventory.applications }} of them and they are rows in
     <code>world.application</code>, part of the enterprise being modelled. The three
     boxes on the right are the only <i>systems</i>: vendor APIs your kit connects to.
@@ -45,22 +45,22 @@
 
 <div class="wrap"><table>
   <tr><th>Service</th><th>Port</th><th>Role</th><th>Talks to</th></tr>
-  <tr><td>world-db</td><td>5433</td><td>The world. Complete and true.</td><td>—</td></tr>
-  <tr><td>world-engine</td><td>—</td><td>Applies schema, generates the world, exits.</td><td>world-db (writes)</td></tr>
+  <tr><td>world-db</td><td>5433</td><td>The world. Complete and true.</td><td>-</td></tr>
+  <tr><td>world-engine</td><td>-</td><td>Applies schema, generates the world, exits.</td><td>world-db (writes)</td></tr>
   <tr><td>twin-gateway</td><td>8080</td><td>Three vendor faces. <b>This is what your kit calls.</b></td><td>world-db (reads)</td></tr>
   <tr><td>control-center</td><td>{{ cc_port }}</td><td>This app. Read-only, computes nothing.</td><td>world-db, twin-gateway</td></tr>
-  <tr><td>keycloak</td><td>8081</td><td>Real OAuth, for when <code>VO_AUTH_MODE=jwks</code> lands.</td><td>—</td></tr>
+  <tr><td>keycloak</td><td>8081</td><td>Real OAuth, for when <code>VO_AUTH_MODE=jwks</code> lands.</td><td>-</td></tr>
   <tr><td>wiremock</td><td>8090</td><td>Adversarial layer. Only under <code>--profile chaos</code>.</td><td>proxies twin-gateway</td></tr>
 </table></div>
 
-<p class="note">Twins are <b>always well-behaved</b> — no injected failures, no throttling, no
+<p class="note">Twins are <b>always well-behaved</b>: no injected failures, no throttling, no
   drift. Everything that misbehaves lives in WireMock, in front of them. The moment a twin
   carries <code>if (chaos) throw 429</code> it becomes unmaintainable and you stop trusting
   its happy path.</p>
 
 <h2>The world is pre-aged</h2>
 <p class="note">Risk posture is a time series. An organisation born when the container started
-  has no trend, no audit cycle, no aging and no velocity — every posture feature untestable.
+  has no trend, no audit cycle, no aging and no velocity, every posture feature untestable.
   So the world boots with <b>three years of causally coherent history</b>:
   {{ meta.history_start }} → {{ meta.as_of }}.</p>
 <div class="status">
@@ -70,15 +70,15 @@
   <div><div class="k">Scale</div><div class="v">{{ meta.scale }}</div></div>
 </div>
 <p class="note" style="margin-top:12px">Same seed and same <code>--as-of</code> produce a
-  byte-identical world. There is no live clock anywhere — “now” is
+  byte-identical world. There is no live clock anywhere, “now” is
   <code>{{ meta.as_of }} 09:00Z</code>, read from <code>world_meta</code>. That is what makes
   world-state <b>W₁</b> → posture <b>P₁</b> golden-file testing work.</p>
 
 {# ============================================================ 2. THE MODEL #}
 {% elif chapter == 'model' %}
 <h2>The spine</h2>
-<p class="note">Every entity below hangs off one graph. All four of the kit's outputs —
-  control effectiveness, residual risk per service, top-N risks, board posture — are
+<p class="note">Every entity below hangs off one graph. All four of the kit's outputs (control effectiveness, residual risk per service,
+  top-N risks, board posture) are
   traversals of it.</p>
 {{ d.spine() }}
 
@@ -94,7 +94,7 @@
   <summary>
     <b>{{ t.name }}</b>
     <span class="desc">{{ t.desc | safe }}</span>
-    <span class="count">{% if t.missing %}—{% else %}{{ "{:,}".format(t.rows) }}{% endif %}</span>
+    <span class="count">{% if t.missing %}-{% else %}{{ "{:,}".format(t.rows) }}{% endif %}</span>
     <span class="unit">{% if t.missing %}<span class="tag conflict">absent</span>{% else %}rows{% endif %}</span>
   </summary>
   {% if t.columns %}
@@ -117,7 +117,7 @@
 
 {% if undocumented %}
 <h2>Undocumented tables</h2>
-<p class="note">These exist in the schema but are not described above — the generator added
+<p class="note">These exist in the schema but are not described above. The generator added
   something the manual has not caught up with. This list is computed, so it cannot be
   quietly wrong.</p>
 <p>{% for u in undocumented %}<span class="tag conflict">{{ u }}</span> {% endfor %}</p>
@@ -127,7 +127,7 @@
 {% elif chapter == 'reach' %}
 <h2>What a connector can actually reach</h2>
 <p class="lede">This is the table to read before writing a single line of connector code.
-  The world holds far more than the vendor APIs expose — and what they do not expose is as
+  The world holds far more than the vendor APIs expose, and what they do not expose is as
   deliberate as what they do.</p>
 
 <div class="wrap"><table>
@@ -156,7 +156,7 @@
 
 <div class="verdict">
   <div class="eyebrow">Why this matters</div>
-  <p>A kit that reports “no vulnerabilities” is not observing a healthy estate — it is
+  <p>A kit that reports “no vulnerabilities” is not observing a healthy estate. It is
     observing that no lens exposes the vulnerability table. Silence has to be
     distinguishable from health, and the rows above marked
     <span class="void" style="display:inline;padding:1px 6px">no API reaches this</span>
@@ -167,7 +167,7 @@
 {% elif chapter == 'gaps' %}
 <h2>Where the graph breaks</h2>
 <p class="lede">A table with 25 rows looks equally healthy whether all 25 are wired into
-  the spine or none are. Row counts cannot tell you the difference — these cross-table
+  the spine or none are. Row counts cannot tell you the difference, these cross-table
   queries can. Every number below is a live query, and the SQL is shown so you can run it
   yourself.</p>
 
@@ -175,7 +175,7 @@
   <div class="eyebrow">Why this page exists</div>
   <p>For a single-source-of-truth product, <b>silence must be distinguishable from health</b>.
     That applies to the harness too: a manual that reports only per-table counts would let a
-    broken graph look like a full one. The <b>API</b> column is the sharper half — a gap the
+    broken graph look like a full one. The <b>API</b> column is the sharper half, a gap the
     vendor APIs cannot even express is one the kit can never be asked to find.</p>
 </div>
 
@@ -205,7 +205,7 @@
 </table></div>
 
 <h2>The queries</h2>
-<p class="note">Nothing above is computed in application code — each row is one of these.</p>
+<p class="note">Nothing above is computed in application code: each row is one of these.</p>
 <pre>{% for g in gaps %}-- {{ g.label }}  →  {{ g.n }}
 {{ g.sql }}
 
@@ -215,7 +215,7 @@
 <h2>Applications attached to no business service ({{ orphans|length }})</h2>
 <p class="note">These run on real machines but nothing depends on them, so they inherit no
   criticality from the service layer. This is a by-product of how the generator samples
-  dependencies rather than a designed condition — which is precisely why it is worth
+  dependencies rather than a designed condition, which is precisely why it is worth
   showing: it is not recorded in <code>world.expectation</code>, so no kit can be scored
   on finding it.</p>
 <div class="wrap"><table>
@@ -225,7 +225,7 @@
       <td>{% if o.criticality in ['high','critical'] %}<span class="tag conflict">{{ o.criticality }}</span>
           {% else %}{{ o.criticality }}{% endif %}</td>
       <td class="num">{{ o.assets }}</td>
-      <td class="dim">{{ o.owner_name or '—' }}</td></tr>
+      <td class="dim">{{ o.owner_name or '-' }}</td></tr>
   {% endfor %}
 </table></div>
 {% endif %}
@@ -234,7 +234,7 @@
 {% elif chapter == 'connect' %}
 <h2>Connect your kit in four steps</h2>
 
-<h2>1 — Point the base URLs at the twin</h2>
+<h2>1 · Point the base URLs at the twin</h2>
 <p class="note">VirtualOrg is only usable if your kit can be aimed at it <b>without editing
   the kit</b>. If you need a patched build to run against a twin, you are testing code that
   is not what ships. Everything below is config, never code.</p>
@@ -245,7 +245,7 @@
   <tr><td>through the chaos layer</td><td><code>http://localhost:8090/servicenow</code></td></tr>
 </table></div>
 
-<h2>2 — Authenticate</h2>
+<h2>2 · Authenticate</h2>
 <p class="note">Static bearer token today. Every endpoint except <code>/healthz</code> and
   <code>/_lens/{id}</code> requires it; a missing or wrong token is a <code>401</code>.</p>
 <pre>Authorization: Bearer {{ token }}</pre>
@@ -256,7 +256,7 @@
 <p class="note">Set <code>VO_TOKENS</code> in <code>.env</code> to change it. It is
   comma-separated, so several tokens can be valid at once.</p>
 <p class="note"><b>Real OAuth is available.</b> <code>VO_AUTH_MODE=jwks</code> validates
-  RS256 tokens against Keycloak's published keys — signature, issuer, audience and expiry,
+  RS256 tokens against Keycloak's published keys, signature, issuer, audience and expiry,
   nothing stubbed. Fetch one with the <code>vo-kit</code> client credentials against
   <code>/realms/virtualorg/protocol/openid-connect/token</code>. A static token is refused
   in that mode, and so is a tampered signature.</p>
@@ -266,16 +266,15 @@
   platforms gate attachment bytes separately from the record API, so a connector that
   assumes one credential covers both will fail here.</p>
 
-<h2>3 — Use the config file, not code</h2>
+<h2>3 · Use the config file, not code</h2>
 <p class="note">This ships in the repo at <code>config/virtualorg/connectors.yaml</code> and
   is shown here verbatim from the running container.</p>
 <pre>{{ config_yaml }}</pre>
 
-<h2>4 — Implement the three call patterns</h2>
-<p class="note">Build for patterns, not brands. These three cover what the twins serve. The
-  async job is the likeliest place to be subtly wrong, and it is absent from most connector
-  checklists.</p>
-{{ d.patterns() }}
+<h2>4 · Implement the {{ n_patterns }} call patterns</h2>
+<p class="note">Build for patterns, not brands. The async job is the likeliest place to be
+  subtly wrong, and it is absent from most connector checklists.</p>
+{{ d.patterns(patterns) }}
 
 <h2>Lens by lens</h2>
 {% for l in lenses %}
@@ -311,7 +310,7 @@
 {% endfor %}
 {% endfor %}
 
-<h2>Customer profiles — the deployability bar</h2>
+<h2>Customer profiles: the deployability bar</h2>
 <p class="note">In this market the schema is defined by the customer, not the vendor. The same
   ServiceNow twin serves three shapes; send <code>X-VO-Profile</code> to pick one, or set
   <code>VO_PROFILE_SERVICENOW</code>. <b>Passing all three means the connector is deployable.
@@ -326,7 +325,7 @@
   {% endfor %}
 </table></div>
 {% if fm.severity %}
-<p class="note" style="margin-top:10px">Severity vocabulary also diverges — the same incident
+<p class="note" style="margin-top:10px">Severity vocabulary also diverges, the same incident
   reports a different value in each:</p>
 <div class="wrap"><table>
   <tr><th>World value</th>{% for p in fm.severity.profiles %}<th>{{ p }}</th>{% endfor %}</tr>
@@ -355,7 +354,7 @@
   {% endfor %}
 </table></div>
 
-<h2>Provenance — is any of this evidence?</h2>
+<h2>Provenance, is any of this evidence?</h2>
 <p class="note">With no vendor product in the loop, all confidence rests on twin
   fidelity. Nothing here can tell you we have misread a vendor's pagination: the
   connector and the twin would be wrong together, in green CI, indefinitely. The only
@@ -366,7 +365,7 @@
   <tr><td class="id"><a href="/lenses/{{ lens_id }}">{{ lens_id }}</a></td>
       <td class="dim">{{ e.api_version }}</td>
       <td class="id">{{ e.basis }}</td>
-      <td class="id dim">{{ e.captured_on or '—' }}</td>
+      <td class="id dim">{{ e.captured_on or '-' }}</td>
       <td>{% if e.status == 'verified' %}<span class="tag ok">verified</span>
           {% else %}<span class="tag conflict">unverified</span>{% endif %}</td>
       <td class="dim">{{ e.notes }}</td></tr>
@@ -374,8 +373,8 @@
 </table></div>
 <div class="verdict warn">
   <div class="eyebrow">What this means for a green run</div>
-  <p>{{ prov.warning }} Paying this down is Phase 4 — a small suite against vendor
-    developer tenants, asserted loosely, run weekly, never per-commit — plus canary
+  <p>{{ prov.warning }} Paying this down is Phase 4, a small suite against vendor
+    developer tenants, asserted loosely, run weekly, never per-commit, plus canary
     probes for schema drift. Until then, treat every passing test here as evidence
     about the kit, never about the vendor.</p>
 </div>
@@ -399,7 +398,7 @@
   <tr><td>Fetching results before DONE returns 204</td><td>Splunk</td>
       <td>Treat as not-ready, not as empty.</td></tr>
   <tr><td>An unknown <code>sid</code> returns 404</td><td>Splunk</td>
-      <td>Resubmit the search — jobs expire.</td></tr>
+      <td>Resubmit the search, jobs expire.</td></tr>
   <tr><td>Cursors are opaque base64</td><td>GRC</td>
       <td>Echo them back; never construct one. Malformed gives 400.</td></tr>
   <tr><td>Field names change per profile</td><td>ServiceNow</td>
@@ -420,7 +419,7 @@
       <td>Do you refresh and retry, or surface a broken source?</td></tr>
   <tr><td>GRC controls</td><td>2 items but <code>total: 100</code></td><td>proxies</td>
       <td>Do you notice the page is short, or report 2 as the whole library?</td></tr>
-  <tr><td>GRC controls, poisoned cursor</td><td>500 cursor expired</td><td>—</td>
+  <tr><td>GRC controls, poisoned cursor</td><td>500 cursor expired</td><td>-</td>
       <td>Does a mid-pagination failure surface, or silently truncate?</td></tr>
   <tr><td>ServiceNow CMDB</td><td>connection reset</td><td>proxies</td>
       <td>Does posture announce a stale source, or serve last week's numbers as current?</td></tr>
@@ -438,12 +437,12 @@
 
 <div class="wrap"><table>
   <tr><th>Source</th><th>Calls it</th><th>Field</th><th>Last seen</th></tr>
-  <tr><td><b>world (truth)</b></td><td>{{ worked.asset.id }}</td><td class="dim">—</td><td class="dim">—</td></tr>
+  <tr><td><b>world (truth)</b></td><td>{{ worked.asset.id }}</td><td class="dim">-</td><td class="dim">-</td></tr>
   {% for l in worked.lenses %}
   <tr><td>{{ l.vendor }}</td>
       <td>{% if l.external_id %}<b>{{ l.external_id }}</b>{% else %}<span class="void">not visible</span>{% endif %}</td>
       <td class="dim">{{ l.identifier_style }}</td>
-      <td class="dim">{{ l.last_seen.strftime('%Y-%m-%d %H:%M') if l.last_seen else '—' }}</td></tr>
+      <td class="dim">{{ l.last_seen.strftime('%Y-%m-%d %H:%M') if l.last_seen else '-' }}</td></tr>
   {% endfor %}
 </table></div>
 <p class="note" style="margin-top:12px">Same machine in world-db:
@@ -467,18 +466,18 @@
       <td>Absence from the SIEM is not evidence a machine does not exist.</td></tr>
   <tr><td>Staleness differs per lens</td>
       <td>A CMDB row up to 72h old and a SIEM row 2h old are not equally authoritative,
-        and the older one is old — not wrong.</td></tr>
+        and the older one is old, not wrong.</td></tr>
   <tr><td>Owner names are strings, not ids</td>
       <td>People appear as bare names on assets and controls. HR calls the same person
-        <code>WD-100001</code> and the IdP calls them <code>mei.andersen1</code> — three
+        <code>WD-100001</code> and the IdP calls them <code>mei.andersen1</code>, three
         representations, no shared key. Two people can also share a name.</td></tr>
   <tr><td>HR cannot see contractors</td>
       <td>The system of record covers employees only. A departed contractor has no HR
-        record at all, so their leaver status is unconfirmable — and absence of a
+        record at all, so their leaver status is unconfirmable, and absence of a
         termination record is not evidence they are still employed.</td></tr>
   <tr><td>The IdP no longer tells you who left</td>
       <td><code>terminationDate</code> is written by the deprovisioning workflow, not by
-        HR. When that workflow failed — which is exactly the orphaned-access case — the
+        HR. When that workflow failed, which is exactly the orphaned-access case, the
         account is <code>ACTIVE</code> with no date. Finding it needs the HR join.</td></tr>
   <tr><td>The EDR is the one join that works</td>
       <td>It names devices by agent id but also carries the short hostname, so it joins
@@ -502,7 +501,7 @@
 </table></div>
 
 <h2>Scoring attribution</h2>
-<p class="note">Nothing in any vendor API links a detection to a control — that inference is
+<p class="note">Nothing in any vendor API links a detection to a control, that inference is
   the kit's core job. <code>world.evidence.control_id</code> is the true answer for every
   event, and <code>is_trap</code> marks events that are topically adjacent to a control but
   are <b>not</b> evidence for it.</p>
@@ -518,11 +517,11 @@ SELECT count(*) FILTER (WHERE NOT is_trap) AS should_attribute,
  WHERE control_id = 'CTL-012';</pre>
 
 <h2>Assertion style per output</h2>
-<p class="note">Asserting absolute values on the board score is a trap — expected numbers get
+<p class="note">Asserting absolute values on the board score is a trap, expected numbers get
   rewritten every time a weight is tuned, and the tests stop meaning anything.</p>
 <div class="wrap"><table>
   <tr><th>Output</th><th>What matters</th><th>Assert as</th></tr>
-  <tr><td>Control effectiveness by framework</td><td>Auditable — someone will check it</td><td>exact match</td></tr>
+  <tr><td>Control effectiveness by framework</td><td>Auditable, someone will check it</td><td>exact match</td></tr>
   <tr><td>Top-N risks</td><td>Ordering, not values</td><td>rank order + set membership</td></tr>
   <tr><td>Residual risk per service</td><td>Defensible direction</td><td>invariants, monotonicity</td></tr>
   <tr><td>Board posture score</td><td>Movement, not level</td><td>deltas within a band</td></tr>
@@ -530,10 +529,10 @@ SELECT count(*) FILTER (WHERE NOT is_trap) AS should_attribute,
 
 <div class="verdict">
   <div class="eyebrow">The real assertion</div>
-  <p>Ground truth is not just expected posture, it is <b>expected lineage</b>. A score of 68
+  <p>Ground truth is not just expected posture; it is <b>expected lineage</b>. A score of 68
     must decompose into what made it 68 rather than 74, and each of those must decompose
     again to a specific detection or overdue finding. You can produce the right number for
-    the wrong reasons, and that is worse than a wrong number — it survives scrutiny until
+    the wrong reasons, and that is worse than a wrong number, it survives scrutiny until
     someone drills into a driver, finds it does not hold up, and stops trusting the tool.
     Testing the number is easy. Testing the explanation is the job.</p>
 </div>

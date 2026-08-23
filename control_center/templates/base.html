@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Control Center{% endblock %} — VirtualOrg</title>
+<title>{% block title %}Control Center{% endblock %}. VirtualOrg</title>
 <link rel="stylesheet" href="/static/app.css?v={{ v }}">
 <script>
 /* Applied before first paint so the chosen theme never flashes. Storage can throw
-   in a private window or with site data blocked — the page must still render. */
+   in a private window or with site data blocked, the page must still render. */
 try {
   var t = localStorage.getItem("vo-theme");
   if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;

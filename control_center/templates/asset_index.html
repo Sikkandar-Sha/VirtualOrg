@@ -3,7 +3,7 @@
 <div class="eyebrow">Surface 1 · one entity, every lens</div>
 <h1>Pick a machine</h1>
 <p class="lede">Every asset, and what the lenses call it. Filter by a lens to find the
-  machines it structurally cannot see — the ones a GRC platform will never tell you about.</p>
+  machines it structurally cannot see, the ones a GRC platform will never tell you about.</p>
 
 <form class="filters" method="get">
   <input name="q" value="{{ q }}" placeholder="id, hostname, fqdn, tag or ip" size="30">
@@ -27,7 +27,7 @@
     <td class="id">{{ r.hostname }}</td><td class="id dim">{{ r.fqdn }}</td>
     <td class="id dim">{{ r.asset_tag }}</td><td class="id dim">{{ r.ip }}</td>
     <td>{{ r.kind }}</td><td>{{ r.criticality }}</td>
-    <td class="dim">{{ r.owner_name or '—' }}</td>
+    <td class="dim">{{ r.owner_name or '-' }}</td>
   </tr>
   {% endfor %}
 </table></div>

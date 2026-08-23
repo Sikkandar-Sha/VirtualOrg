@@ -20,7 +20,7 @@
       <td>{{ 'yes' if a.privileged else 'no' }}</td><td class="id dim">{{ a.created_on }}</td>
       <td>{% if a.disabled_on %}{{ a.disabled_on }}
           {% elif p.ended_on %}<span class="tag conflict">still enabled</span>
-          {% else %}<span class="dim">—</span>{% endif %}</td></tr>
+          {% else %}<span class="dim">-</span>{% endif %}</td></tr>
   {% endfor %}
 </table></div>
 

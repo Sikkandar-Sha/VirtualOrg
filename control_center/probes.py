@@ -1,7 +1,7 @@
 """
 Reachability probes. The Control Center answers "is everything running" by asking
-each dependency the question that actually matters — can it be reached and does it
-answer correctly — rather than by reading container state from the Docker daemon.
+each dependency the question that actually matters, can it be reached and does it
+answer correctly, rather than by reading container state from the Docker daemon.
 
 It never mutates anything it probes.
 """
@@ -17,7 +17,7 @@ AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 
 def _http(name, url, expect=200, headers=None, optional=False):
-    """Keycloak serves /health on its management port, not 8080 — probe a real
+    """Keycloak serves /health on its management port, not 8080, probe a real
     endpoint the service actually answers on instead of a health path that 404s."""
     try:
         r = httpx.get(url, headers=headers or {}, timeout=4)
@@ -107,7 +107,7 @@ def twin_call(method, path, params=None, data=None, profile=None):
 
 
 def provenance():
-    """§5's standing hazard, surfaced. A hazard nobody can see is not mitigated."""
+    """#5's standing hazard, surfaced. A hazard nobody can see is not mitigated."""
     try:
         return httpx.get(f"{TWIN}/_provenance", headers=AUTH, timeout=6).json()
     except Exception as e:

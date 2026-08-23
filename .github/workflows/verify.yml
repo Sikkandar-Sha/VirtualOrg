@@ -90,6 +90,20 @@ jobs:
           print("counts agree")
           EOF
 
+      - name: No em dashes in anything we author
+        run: |
+          # A hard rule, not a preference: the long dash reads as machine-written.
+          # The character is built at runtime with printf so that this file does not
+          # contain the very thing it bans and flag itself.
+          DASH=$(printf '\u2014')
+          hits=$(git ls-files | grep -v '^DESIGN.md$' | xargs grep -l "$DASH" 2>/dev/null || true)
+          if [ -n "$hits" ]; then
+            echo "long dash found in:"; echo "$hits"
+            git ls-files | grep -v '^DESIGN.md$' | xargs grep -n "$DASH" 2>/dev/null | head -20
+            exit 1
+          fi
+          echo "clean: DESIGN.md keeps its own voice, everything else is free of it"
+
       - name: The chaos profile serves the happy path
         run: |
           docker compose --profile chaos up -d wiremock

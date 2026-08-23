@@ -34,7 +34,7 @@
           {% else %}{{ b.criticality }}{% endif %}</td>
       <td class="num">{{ b.rto_hours }}</td><td class="unit">h</td>
       <td class="num">{{ b.services }}</td>
-      <td class="dim">{{ b.owner_name or '—' }}{% if b.owner_ended_on %} <span class="tag conflict">left</span>{% endif %}</td></tr>
+      <td class="dim">{{ b.owner_name or '-' }}{% if b.owner_ended_on %} <span class="tag conflict">left</span>{% endif %}</td></tr>
   {% endfor %}
 </table></div>
 
@@ -47,7 +47,7 @@
     <td>{{ s.name }}</td>
     <td>{% if s.criticality == 'tier1' %}<span class="tag">{{ s.criticality }}</span>{% else %}{{ s.criticality }}{% endif %}</td>
     <td class="num">{{ "{:,.0f}".format(s.daily_revenue) }}</td>
-    <td class="dim">{{ s.owner_name or '—' }}</td>
+    <td class="dim">{{ s.owner_name or '-' }}</td>
   </tr>
   {% endfor %}
 </table></div>
@@ -61,7 +61,7 @@
     <td class="id"><a href="/spine/control/{{ c.id }}">{{ c.ref }}</a></td>
     <td>{{ c.title }}</td>
     <td class="dim">{{ c.test_frequency }}</td>
-    <td class="id dim">{{ c.last_tested_on or '—' }}</td>
+    <td class="id dim">{{ c.last_tested_on or '-' }}</td>
     <td>
       {% if not c.last_result %}<span class="void">never assessed</span>
       {% elif c.last_result == 'effective' and c.overdue_findings %}
@@ -70,7 +70,7 @@
     </td>
     <td class="num">{{ c.overdue_findings }}</td>
     <td class="num">{{ c.evidence_rows }}</td>
-    <td class="dim">{{ c.owner_name or '—' }}{% if c.owner_ended_on %} <span class="tag conflict">left</span>{% endif %}</td>
+    <td class="dim">{{ c.owner_name or '-' }}{% if c.owner_ended_on %} <span class="tag conflict">left</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table></div>

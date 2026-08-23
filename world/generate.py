@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VirtualOrg — deterministic world generator.
+VirtualOrg, deterministic world generator.
 
 Produces a complete, TRUE enterprise plus three years of causally coherent history,
 then derives each lens's degraded view of it (lens_visibility) and writes the
@@ -264,7 +264,7 @@ def build(g: argparse.Namespace, gen: Gen):
     #
     # The previous version sampled 2-5 apps per service straight from the full
     # pool, which left ~40% of applications attached to nothing purely by
-    # coupon-collector arithmetic — an accident that looked like a planted
+    # coupon-collector arithmetic, an accident that looked like a planted
     # condition. Coverage is now guaranteed, and a tuned slice is held back
     # deliberately and written into world.expectation so it is scoreable.
     r2 = random.Random(g.seed ^ 0x5EED)
@@ -300,7 +300,7 @@ def build(g: argparse.Namespace, gen: Gen):
 
     # A crosswalk is a claim about equivalence, and it is rarely exact. Partial
     # equivalence is why a single control failure moves two frameworks by different
-    # amounts — and why you can explain the difference rather than just compute it.
+    # amounts, and why you can explain the difference rather than just compute it.
     cross = []
     for q in csf:
         for t in r4.sample(reqs, r4.randint(1, 3)):
@@ -312,7 +312,7 @@ def build(g: argparse.Namespace, gen: Gen):
         theme, tag = CONTROL_THEMES[(i - 1) % len(CONTROL_THEMES)]
         owner = gen.pick(people)
         controls.append({"id": f"CTL-{i:03d}", "ref": f"C-{i:03d}",
-                         "title": f"{theme} — control {i}", "tag": tag,
+                         "title": f"{theme}, control {i}", "tag": tag,
                          "owner": owner, "freq": gen.pick(["monthly","quarterly","annual"]),
                          "automated": r.random() < 0.4})
     gen.put("control", [(c["id"], c["ref"], c["title"], c["owner"]["id"], c["freq"], c["automated"])
@@ -372,7 +372,7 @@ def build(g: argparse.Namespace, gen: Gen):
                     closed = None
             status = "closed" if closed else ("overdue" if due < today else "open")
             findings.append({"id": f"AF-{n_find:03d}", "audit": aid, "control": c["id"],
-                             "title": f"{c['title'].split(' — ')[0]} not consistently performed",
+                             "title": f"{c['title'].split('. ')[0]} not consistently performed",
                              "sev": sev, "raised": raised, "due": due, "closed": closed,
                              "status": status})
     gen.put("finding", [(f["id"], f["audit"], f["control"], f["title"], f["sev"],
@@ -504,7 +504,7 @@ def build(g: argparse.Namespace, gen: Gen):
     uncovered = [c for c in controls if c["id"] not in have_ev]
 
     r5 = random.Random(g.seed ^ 0xDA1)
-    # business process — the Service -> Process hop the spine draws
+    # business process, the Service -> Process hop the spine draws
     procs = [{"id": f"BP-{i:02d}", "name": n, "crit": crit, "rto": rto,
               "owner": people[r5.randrange(len(people))]["id"]}
              for i, (n, crit, rto) in enumerate(PROCESSES, 1)]
@@ -519,7 +519,7 @@ def build(g: argparse.Namespace, gen: Gen):
 
     # ---- lenses (all loss lives here)
     #
-    # The chaos dial (DESIGN.md §4.4) lives in the loss profiles, never in the world.
+    # The chaos dial (DESIGN.md #4.4) lives in the loss profiles, never in the world.
     # The world is always true; only what the lenses do to it changes.
     #
     #   0  pristine      one identifier scheme, complete coverage, no staleness
@@ -532,7 +532,7 @@ def build(g: argparse.Namespace, gen: Gen):
          "assets procured outside IT"),
         # Coverage of the estate is partial and the blind spot says why: a GRC
         # platform knows what was typed into it, not what exists. It still holds the
-        # whole control library — that is its own domain, entered by definition.
+        # whole control library, that is its own domain, entered by definition.
         ("grc",        "Onspring",   "grc",    0.91, 10080,"asset_tag", 3650,
          "assets never entered into the register by hand"),
         # Appended AFTER the original three on purpose: the loop below draws from the
@@ -546,7 +546,7 @@ def build(g: argparse.Namespace, gen: Gen):
         # engaged through an agency. That blind spot is the point: a departed
         # contractor cannot be confirmed as a leaver from HR at all.
         ("hr",         "Workday",    "hcm",    1.00, 1440, "employee_id", 3650,
-         "contractors — they are engaged through vendor management, not HR"),
+         "contractors, they are engaged through vendor management, not HR"),
         ("edr",        "CrowdStrike","edr",    0.79, 5,    "agent_id",  30,
          "assets where the agent was never deployed"),
     ]
@@ -556,14 +556,14 @@ def build(g: argparse.Namespace, gen: Gen):
         # Correlation becomes trivial, which is the point: baseline regression.
         lenses = [(lid, v, cat, 1.00, 0,
                    "username" if cat == "iam" else "fqdn", 36500,
-                   "nothing — chaos level 0 is the pristine baseline")
+                   "nothing, chaos level 0 is the pristine baseline")
                   for lid, v, cat, _c, _l, _st, _r, _b in base_lenses]
     else:
         lenses = base_lenses
     gen.put("lens", lenses)
 
     def agent_id(a):
-        """Opaque to everything else in the world — an EDR names machines by the
+        """Opaque to everything else in the world, an EDR names machines by the
         agent it installed, not by anything the machine itself carries."""
         h = hashlib.sha1(a["id"].encode()).hexdigest()
         return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
@@ -616,7 +616,7 @@ def build(g: argparse.Namespace, gen: Gen):
                             dt.datetime.combine(today, dt.time(8, 0), tzinfo=dt.timezone.utc)))
         if cat == "itsm":
             # The CMDB carries the application and service layer, and names CIs by
-            # their name — not by the fqdn it uses for computers. Same lens, two
+            # their name, not by the fqdn it uses for computers. Same lens, two
             # identifier styles, which is what real CMDBs actually do.
             stamp = dt.datetime.combine(today, dt.time(8, 0), tzinfo=dt.timezone.utc)
             for ap in apps:
@@ -750,7 +750,7 @@ def build(g: argparse.Namespace, gen: Gen):
                 {"control_id": e[3], "source": e[2]})
 
 
-    # ---- the day-one domains DESIGN.md §3 names but that were never built:
+    # ---- the day-one domains DESIGN.md #3 names but that were never built:
     # business processes, policies, exceptions, treatments, software inventory,
     # misconfigurations, groups and entitlements. Own stream, so adding them does
     # not rewrite the world that already exists.
@@ -800,7 +800,7 @@ def build(g: argparse.Namespace, gen: Gen):
             pc.append((x["id"], cc["id"]))
     gen.put("policy_control", sorted(set(pc)))
 
-    # control exceptions — some expired but still recorded as active
+    # control exceptions, some expired but still recorded as active
     exc, n_exc, stale_exc = [], 0, []
     for cc in r5.sample(controls, 18):
         n_exc += 1
@@ -830,13 +830,13 @@ def build(g: argparse.Namespace, gen: Gen):
             status = "complete" if done else ("overdue" if target < today else
                                               r5.choice(["planned", "in_progress"]))
             trt.append((f"TRT-{n_trt:03d}", x["id"], strategy,
-                        f"{strategy.title()} — {x['title']}",
+                        f"{strategy.title()}, {x['title']}",
                         people[r5.randrange(len(people))]["id"], target, done, status))
             if status == "overdue" and x["inherent"] > x["appetite"]:
                 overdue_trt.append((f"TRT-{n_trt:03d}", x, target))
     gen.put("risk_treatment", trt)
 
-    # access groups and membership — retained privileged access is a real conflict
+    # access groups and membership, retained privileged access is a real conflict
     groups = [{"id": f"GRP-{i:02d}", "name": n, "sys": sysn, "priv": priv}
               for i, (n, sysn, priv) in enumerate([
                   ("Domain Admins", "ad", True), ("Server Operators", "ad", True),

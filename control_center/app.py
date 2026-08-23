@@ -1,9 +1,9 @@
 """
-VirtualOrg Control Center — a live specification of the synthetic enterprise.
+VirtualOrg Control Center, a live specification of the synthetic enterprise.
 
-DESIGN.md §8: read-only over world-db and twin responses, zero business logic.
+DESIGN.md #8: read-only over world-db and twin responses, zero business logic.
 Every number on every page is a query in queries.py. Nothing here aggregates,
-scores or infers — that is the job of the kit under test, and building a second
+scores or infers. That is the job of the kit under test, and building a second
 implementation of "what is true about this enterprise" inside the harness would
 be the exact bug the product exists to detect.
 
@@ -277,11 +277,11 @@ CHAPTERS = [
 # Live examples, per lens. Each is executed against the running twin when its
 # chapter is viewed, so the manual shows what the kit actually receives today.
 SNOW_BLURB = {
-    "cmdb_ci_computer": "Computers — offset pagination, named by FQDN",
+    "cmdb_ci_computer": "Computers, offset pagination, named by FQDN",
     "incident": "Incidents",
-    "cmdb_ci_appl": "Applications — named by CI name, not the APP- id",
-    "cmdb_ci_service": "Business services — name, tier and owner",
-    "cmdb_rel_ci": "Relationships — this is what makes the spine walkable",
+    "cmdb_ci_appl": "Applications, named by CI name, not the APP- id",
+    "cmdb_ci_service": "Business services, name, tier and owner",
+    "cmdb_rel_ci": "Relationships: this is what makes the spine walkable",
 }
 
 
@@ -294,7 +294,7 @@ def _snow_examples():
             f"/servicenow/api/now/table/{t}", {"sysparm_limit": "2"}, "out-of-the-box")
            for t in tables]
     # one side-by-side so the profile difference is visible, not just described
-    out.append(("servicenow", "The same computers call, heavily-customized profile — "
+    out.append(("servicenow", "The same computers call, heavily-customized profile. "
                 "every field renamed", "GET",
                 "/servicenow/api/now/table/cmdb_ci_computer",
                 {"sysparm_limit": "2"}, "heavily-customized"))
@@ -302,30 +302,62 @@ def _snow_examples():
 
 
 EXAMPLES = _snow_examples() + [
-    ("iam", "Users — Link-header pagination; read the next URL, never build it",
+    ("iam", "Users. Link-header pagination; read the next URL, never build it",
      "GET", "/iam/api/v1/users", {"limit": "3"}, None),
-    ("scanner", "Findings — incremental polling; feed next_since back on the next call",
+    ("scanner", "Findings, incremental polling; feed next_since back on the next call",
      "GET", "/scanner/api/v3/findings", {"limit": "3"}, None),
-    ("scanner", "Scanned assets — named by hostname, the fourth identifier style",
+    ("scanner", "Scanned assets, named by hostname, the fourth identifier style",
      "GET", "/scanner/api/v3/assets", {"limit": "3"}, None),
-    ("hr", "Workers — page / per_page; HR is blind to contractors",
+    ("hr", "Workers, page / per_page; HR is blind to contractors",
      "GET", "/hr/api/v1/workers", {"per_page": "2"}, None),
-    ("edr", "Step 1 of 2 — ids only, no device detail",
+    ("edr", "Step 1 of 2, ids only, no device detail",
      "GET", "/edr/devices/queries/devices/v1", {"limit": "3"}, None),
-    ("splunk", "Step 1 of 3 — submit the search job",
+    ("splunk", "Step 1 of 3, submit the search job",
      "POST", "/splunk/services/search/jobs", {"search": "search index=main"}, None),
-    ("grc", "Controls — cursor pagination", "GET", "/grc/api/v1/controls", {"limit": "2"}, None),
-    ("grc", "Assets — the third identifier style", "GET", "/grc/api/v1/assets", {"limit": "2"}, None),
+    ("grc", "Controls, cursor pagination", "GET", "/grc/api/v1/controls", {"limit": "2"}, None),
+    ("grc", "Assets, the third identifier style", "GET", "/grc/api/v1/assets", {"limit": "2"}, None),
     ("grc", "Overdue findings", "GET", "/grc/api/v1/findings",
      {"limit": "2", "status": "overdue"}, None),
-    ("grc", "Risks — note review_status is asserted, not verified",
+    ("grc", "Risks, note review_status is asserted, not verified",
      "GET", "/grc/api/v1/risks", {"limit": "2"}, None),
-    ("grc", "Control mappings — coverage is a fraction, not a boolean",
+    ("grc", "Control mappings, coverage is a fraction, not a boolean",
      "GET", "/grc/api/v1/control-mappings", {"limit": "2"}, None),
-    ("grc", "Frameworks — two of them, so mapping strength is mandatory",
+    ("grc", "Frameworks, two of them, so mapping strength is mandatory",
      "GET", "/grc/api/v1/frameworks", {}, None),
-    ("grc", "Crosswalks — equivalence between frameworks, mostly partial",
+    ("grc", "Crosswalks, equivalence between frameworks, mostly partial",
      "GET", "/grc/api/v1/crosswalks", {"limit": "2"}, None),
+]
+
+# name, lens, and the call sequence worth drawing. Each step is (request, response).
+CALL_PATTERNS = [
+    ("Offset pagination", "ServiceNow",
+     [("GET ?sysparm_offset=0", "200 · X-Total-Count"),
+      ("GET ?sysparm_offset=100", "200 · next page"),
+      ("GET ?sysparm_offset=200", "fewer than limit · stop")]),
+    ("Async search job", "Splunk",
+     [("POST /jobs search=…", "201 · {sid}"),
+      ("GET /jobs/{sid}", "RUNNING · never done first poll"),
+      ("GET /jobs/{sid}/results", "200 · rows")]),
+    ("Cursor pagination", "GRC",
+     [("GET ?limit=50", "200 · next_cursor"),
+      ("GET ?cursor=…", "200 · next_cursor"),
+      ("GET ?cursor=…", "next_cursor null · stop")]),
+    ("Link header", "Okta",
+     [("GET /users?limit=200", "200 · Link rel=\"next\""),
+      ("GET <the url it gave you>", "200 · Link rel=\"next\""),
+      ("GET <the url it gave you>", "no rel=next · stop")]),
+    ("Incremental since", "Tenable",
+     [("GET ?since=<checkpoint>", "200 · next_since"),
+      ("GET ?since=<next_since>", "late records, older first_found"),
+      ("GET ?since=<next_since>", "empty · stop")]),
+    ("Page number", "Workday",
+     [("GET ?page=1&per_page=200", "200 · total_pages"),
+      ("GET ?page=2", "200 · workers"),
+      ("page == total_pages", "stop")]),
+    ("Query then hydrate", "CrowdStrike",
+     [("GET /queries/devices", "200 · ids only"),
+      ("POST /entities/devices", "200 · detail for those ids"),
+      ("unknown ids", "silently absent, not an error")]),
 ]
 
 LENS_PATTERN = {"servicenow": ("/servicenow/api/now/table", "offset"),
@@ -358,22 +390,35 @@ def manual(request: Request, ch: str = "overview"):
            "cc_port": os.environ.get("VO_CC_PORT", "3000")}
 
     if ch == "overview":
+        # Geometry is computed from the content, not guessed. A fixed box height
+        # with a variable-length list is why text used to spill through the border,
+        # and truncating the list to fit hid data rather than showing it.
+        BOX_W, WRAP = 300, 43           # 272px of inner width at 10.5px monospace
+        PAD_T, H_VENDOR, H_LOSS, H_LABEL, H_LINE, PAD_B = 16, 20, 18, 18, 14, 16
+        GAP, TOP = 18, 16
+
         lo = M.lens_objects()
-        rows = []
+        rows, y = [], TOP
         for l in sorted(Q.lenses(), key=lambda x: list(LENS_PATTERN).index(x["id"])
                         if x["id"] in LENS_PATTERN else 99):
             mins = l["latency_minutes"]
             sync = (f"{mins} min" if mins < 60 else
                     f"{mins // 60}h" if mins < 1440 else f"{mins // 1440}d")
-            objs = ", ".join(lo.get(l["id"], []))
-            rows.append({"vendor": l["vendor"], "cat": l["category"],
-                         "cov": int(round(l["coverage"] * 100)),
-                         "ident": l["identifier_style"], "sync": sync,
-                         "retention": l["retention_days"],
-                         # wrapped here, on word boundaries: SVG has no text flow, and
-                         # splitting on a character count breaks identifiers in half
-                         "object_lines": textwrap.wrap(objs, width=40)[:3]})
-        ctx.update(inventory=M.world_inventory(), lens_rows=rows)
+            lines = textwrap.wrap(", ".join(lo.get(l["id"], [])) or "nothing", WRAP)
+            h = PAD_T + H_VENDOR + H_LOSS + H_LABEL + H_LINE * len(lines) + PAD_B
+            rows.append({
+                "vendor": l["vendor"], "cat": l["category"],
+                "loss": f'{int(round(l["coverage"] * 100))}% cover · by {l["identifier_style"]} · {sync} behind',
+                "lines": lines, "y": y, "h": h, "mid": y + h // 2,
+            })
+            y += h + GAP
+
+        ctx.update(inventory=M.world_inventory(), lens_rows=rows,
+                   geom={"box_x": 300, "box_w": BOX_W, "pad_t": PAD_T,
+                         "h_vendor": H_VENDOR, "h_loss": H_LOSS, "h_label": H_LABEL,
+                         "h_line": H_LINE, "top": TOP,
+                         "bottom": y - GAP, "svg_h": y - GAP + 46,
+                         "mid": (TOP + (y - GAP)) // 2})
     elif ch == "model":
         groups, undocumented, live = M.domains_with_schema()
         ctx.update(groups=groups, undocumented=undocumented, live=live)
@@ -397,7 +442,8 @@ def manual(request: Request, ch: str = "overview"):
                 "result": M.live_example(path, params=params if method == "GET" else None,
                                          data=params if method == "POST" else None,
                                          method=method, profile=profile, cap=2200)})
-        ctx.update(lenses=lenses, examples=examples,
+        ctx.update(lenses=lenses, examples=examples, patterns=CALL_PATTERNS,
+                   n_patterns=spell(len(CALL_PATTERNS)).lower(),
                    fieldmaps=M.profile_fieldmaps(), config_yaml=M.config_file(),
                    token=TOKEN_PLACEHOLDER)
     elif ch == "api":

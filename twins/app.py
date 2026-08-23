@@ -1,9 +1,9 @@
 """
-VirtualOrg twin-gateway — one process, N vendor faces, routed by path prefix.
+VirtualOrg twin-gateway, one process, N vendor faces, routed by path prefix.
 
 Every response is a projection over world-db through a lens (twins/lenses.py).
 Twins are ALWAYS well-behaved: no injected failures, no throttling, no drift.
-Adversarial behaviour belongs in WireMock, in front of this. (DESIGN.md §2)
+Adversarial behaviour belongs in WireMock, in front of this. (DESIGN.md #2)
 """
 import base64
 import hashlib
@@ -64,7 +64,7 @@ _JWKS_CLIENT = None
 
 
 def _jwks_client():
-    """One PyJWKClient, which caches keys and refetches on an unknown kid — so a
+    """One PyJWKClient, which caches keys and refetches on an unknown kid, so a
     JWKS rotation is picked up without a restart, and the kit's refresh path is
     exercised for real rather than waved through."""
     global _JWKS_CLIENT
@@ -80,8 +80,8 @@ def _verify_jwt(token: str):
     """Real signature verification against Keycloak's published keys.
 
     Nothing here is stubbed. An expired token fails, a wrong signature fails, a
-    token from another realm fails — which is the only way the kit's own token
-    refresh handling can be shown to work. (DESIGN.md §5)
+    token from another realm fails, which is the only way the kit's own token
+    refresh handling can be shown to work. (DESIGN.md #5)
     """
     import jwt
     try:
@@ -146,7 +146,7 @@ def lens_info(lens_id: str, authorization: Optional[str] = Header(None)):
 @app.get("/_provenance")
 def provenance_all(authorization: Optional[str] = Header(None)):
     """Not a vendor endpoint. Where each response shape came from, and whether that
-    is evidence. DESIGN.md §5: twins built from imagination are marked unverified."""
+    is evidence. DESIGN.md #5: twins built from imagination are marked unverified."""
     require_token(authorization)
     out = {}
     for lens_id, e in PROVENANCE.items():
@@ -276,7 +276,7 @@ def snow_table(table: str,
         # Both ends are named exactly as the CI tables name them, so a connector can
         # join on the strings it already has: services and apps by name, computers by
         # FQDN. A relationship is only returned when BOTH ends are visible to this
-        # lens — an edge to a CI the CMDB cannot see would be a dangling reference.
+        # lens, an edge to a CI the CMDB cannot see would be a dangling reference.
         svc = lenses.visible_ids("servicenow", "business_service")
         app_ = lenses.visible_ids("servicenow", "application")
         ast = lenses.visible_ids("servicenow", "asset")
@@ -315,7 +315,7 @@ def snow_table(table: str,
 
 
 # ===================================================================== Splunk
-# Pattern: asynchronous search job. Submit -> poll -> fetch. (DESIGN.md §6)
+# Pattern: asynchronous search job. Submit -> poll -> fetch. (DESIGN.md #6)
 _JOBS: dict = {}
 SPL = "/splunk/services/search/jobs"
 
@@ -402,7 +402,7 @@ def splunk_job_results(sid: str, offset: int = 0, count: int = Query(100, le=500
 
 # ========================================================================= HR
 # Pattern: page / per_page with a total_pages envelope. The system of record for
-# employees — and, by design, blind to everyone engaged through an agency.
+# employees, and, by design, blind to everyone engaged through an agency.
 HR = "/hr/api/v1"
 
 
@@ -445,7 +445,7 @@ def hr_workers(page: int = 1, per_page: int = Query(100, le=1000),
 # ======================================================================== EDR
 # Pattern: query for ids, then hydrate them in a second call. Common, and the place
 # a connector most often forgets that the id list and the detail call page
-# differently. (DESIGN.md §5)
+# differently. (DESIGN.md #5)
 EDR = "/edr/devices"
 
 
@@ -459,7 +459,7 @@ def _edr_rows():
 @app.get(EDR + "/queries/devices/v1")
 def edr_query(limit: int = Query(100, le=5000), offset: int = 0,
               authorization: Optional[str] = Header(None)):
-    """Step 1 of 2 — ids only. No device detail is returned here, by design."""
+    """Step 1 of 2, ids only. No device detail is returned here, by design."""
     require_token(authorization)
     rows = _edr_rows()
     ids = [v["external_id"] for _, v in rows]
@@ -471,7 +471,7 @@ def edr_query(limit: int = Query(100, le=5000), offset: int = 0,
 
 @app.post(EDR + "/entities/devices/v2")
 async def edr_hydrate(request: Request, authorization: Optional[str] = Header(None)):
-    """Step 2 of 2 — hydrate ids from step 1. Unknown ids are silently absent from
+    """Step 2 of 2, hydrate ids from step 1. Unknown ids are silently absent from
     the response rather than raising, exactly as a real bulk endpoint behaves."""
     require_token(authorization)
     body = await request.json()
@@ -501,7 +501,7 @@ async def edr_hydrate(request: Request, authorization: Optional[str] = Header(No
 
 # ======================================================================== IAM
 # Pattern: Link-header pagination (Okta-shaped). The next page is a URL the server
-# hands you in a header — construct one yourself and you will drift. (DESIGN.md §5)
+# hands you in a header, construct one yourself and you will drift. (DESIGN.md #5)
 IAM = "/iam/api/v1"
 
 
@@ -532,7 +532,7 @@ def _iam_user(r, v):
             "firstName": first, "lastName": last,
             # Written by the deprovisioning workflow, not by HR directly. When that
             # workflow never ran, the account stays ACTIVE *and* carries no
-            # termination date — so the leaver signal has to come from HR, and
+            # termination date, so the leaver signal has to come from HR, and
             # finding orphaned access becomes a genuine cross-source join.
             "terminationDate": iso(r["ended_on"]) if r["disabled_on"] else None,
             "userType": "privileged" if r["privileged"] else "standard",
@@ -578,7 +578,7 @@ def iam_groups(authorization: Optional[str] = Header(None)):
 
 @app.get(IAM + "/users/{login}/groups")
 def iam_user_groups(login: str, authorization: Optional[str] = Header(None)):
-    """Membership as the directory holds it — including memberships never revoked
+    """Membership as the directory holds it, including memberships never revoked
     after the person left, which the directory has no opinion about."""
     require_token(authorization)
     rows = db.q("""SELECT g.id, g.name, g.privileged, m.granted_on, m.revoked_on
@@ -605,8 +605,8 @@ def iam_user(login: str, authorization: Optional[str] = Header(None)):
 
 
 # ==================================================================== SCANNER
-# Pattern: incremental polling by `since`. Records arrive late and backdated — a
-# finding fixed last month re-enters the feed with an old first_found. (DESIGN.md §5)
+# Pattern: incremental polling by `since`. Records arrive late and backdated, a
+# finding fixed last month re-enters the feed with an old first_found. (DESIGN.md #5)
 SCAN = "/scanner/api/v3"
 
 
@@ -889,7 +889,7 @@ def grc_treatments(status: Optional[str] = None, cursor: Optional[str] = None,
                   for r in rows], cursor, limit)
 
 
-# --- framework / taxonomy sync (DESIGN.md §5) -------------------------------
+# --- framework / taxonomy sync (DESIGN.md #5) -------------------------------
 @app.get(GRC + "/frameworks")
 def grc_frameworks(authorization: Optional[str] = Header(None)):
     require_token(authorization)
@@ -921,9 +921,9 @@ def grc_requirements(framework: Optional[str] = None, cursor: Optional[str] = No
 @app.get(GRC + "/crosswalks")
 def grc_crosswalks(cursor: Optional[str] = None, limit: int = Query(200, le=1000),
                    authorization: Optional[str] = Header(None)):
-    """Equivalence between two frameworks' requirements — and it is mostly partial.
+    """Equivalence between two frameworks' requirements, and it is mostly partial.
     A control failure therefore moves ISO and CSF by different amounts, which is the
-    difference between computing a number and being able to explain it. (§4.2)"""
+    difference between computing a number and being able to explain it. (#4.2)"""
     require_token(authorization)
     rows = db.q("""SELECT sq.ref AS source_ref, sf.name AS source_framework,
                           tq.ref AS target_ref, tf.name AS target_framework,
@@ -939,7 +939,7 @@ def grc_crosswalks(cursor: Optional[str] = None, limit: int = Query(200, le=1000
                    "equivalence": float(r["equivalence"])} for r in rows], cursor, limit)
 
 
-# --- binary evidence retrieval (DESIGN.md §5) -------------------------------
+# --- binary evidence retrieval (DESIGN.md #5) -------------------------------
 MAX_DOWNLOAD_BYTES = 5_000_000
 
 # Keyed independently of the bearer token. Deriving it from VO_TOKENS made the

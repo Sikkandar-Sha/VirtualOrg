@@ -1,4 +1,4 @@
-# Vendor pack x customer profile (§5). Same twin, three shapes.
+# Vendor pack x customer profile (#5). Same twin, three shapes.
 out-of-the-box:
   incident:
     fields: {ref: number, title: short_description, category: category,

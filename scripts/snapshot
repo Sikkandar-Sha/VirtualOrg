@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Freeze the current world as a named baseline. Generating 3 years of history is
-# the slowest thing in the loop; do it once, restore it thereafter. (DESIGN.md §2)
+# the slowest thing in the loop; do it once, restore it thereafter. (DESIGN.md #2)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME="${1:-baseline}"

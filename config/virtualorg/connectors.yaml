@@ -1,5 +1,5 @@
-# Point your kit at VirtualOrg. Same binary as production — only this file differs.
-# This is the file that proves the DESIGN.md §6 contract holds.
+# Point your kit at VirtualOrg. Same binary as production, only this file differs.
+# This is the file that proves the DESIGN.md #6 contract holds.
 #
 #   from your IDE / host   -> base_url http://localhost:8080/...
 #   from inside compose    -> base_url http://twin-gateway:8080/...

@@ -4,10 +4,10 @@ VirtualOrg self-verification.
 
 Proves the environment actually exhibits, through the vendor APIs, the conditions
 that world-db's ground truth claims are there. If this passes, the four assertion
-families in DESIGN.md §7 are live and the kit can be scored against them.
+families in DESIGN.md #7 are live and the kit can be scored against them.
 
 Every ServiceNow-dependent check runs against ALL THREE customer profiles, because
-"passing only out-of-the-box means it demos" (DESIGN.md §5) applies to the harness
+"passing only out-of-the-box means it demos" (DESIGN.md #5) applies to the harness
 as much as to the kit. Field names are resolved from twins/profiles/servicenow.yaml,
 never hardcoded.
 
@@ -44,7 +44,7 @@ fails = []
 
 
 def check(name, ok, detail=""):
-    print(f"  {'PASS' if ok else 'FAIL'}  {name}" + (f"  — {detail}" if detail else ""))
+    print(f"  {'PASS' if ok else 'FAIL'}  {name}" + (f" , {detail}" if detail else ""))
     if not ok:
         fails.append(name)
 
@@ -140,7 +140,7 @@ clashes = [f"{a}/{b}" for (a, x), (b, y) in itertools.combinations(styles.items(
 check("no identifier is shared by ANY pair of asset lenses", not clashes,
       " / ".join(styles) + " are mutually disjoint")
 
-# ---- 2. the profiles genuinely diverge (the deployability bar, DESIGN.md §5)
+# ---- 2. the profiles genuinely diverge (the deployability bar, DESIGN.md #5)
 print("\nCustomer profiles")
 for table in ("incident", "cmdb_ci_computer"):
     names = {p: set(SNOW_PROFILES[p][table]["fields"].values()) for p in PROFILES}
@@ -240,7 +240,7 @@ check("no relationship dangles to an invisible CI",
 mapped = {e[rc_] for e in dep}
 unmapped = app_names - mapped
 check("applications exist that belong to no business service",
-      len(unmapped) > 0, f"{len(unmapped)} of {len(app_names)} — recorded in world.expectation")
+      len(unmapped) > 0, f"{len(unmapped)} of {len(app_names)}, recorded in world.expectation")
 
 # ---- 4c. the two new lenses
 print("\nIAM lens")
@@ -265,17 +265,17 @@ allu = c.get("/iam/api/v1/users", params={"limit": 1000}).json()
 deprov = [u for u in allu if u["profile"].get("terminationDate")]
 check("only deprovisioned users carry a termination date",
       all(u["status"] == "DEPROVISIONED" for u in deprov),
-      f"{len(deprov)} of {len(allu)} — written by the workflow, so its absence is the tell")
+      f"{len(deprov)} of {len(allu)}, written by the workflow, so its absence is the tell")
 check("the IdP alone cannot identify orphaned access",
       not [u for u in allu if u["status"] == "ACTIVE" and u["profile"].get("terminationDate")],
-      "it takes an HR join — see Cross-source correlation below")
+      "it takes an HR join, see Cross-source correlation below")
 active = c.get("/iam/api/v1/users", params={"limit": 1000, "filter": 'status eq "ACTIVE"'}).json()
 check("IAM honours the status filter",
       all(u["status"] == "ACTIVE" for u in active) and len(active) < len(allu),
       f"{len(active)} active of {len(allu)}")
 ownf = fld("out-of-the-box", "cmdb_ci_computer", "owner")
 snow_owner_names = {r[ownf] for r in snow("cmdb_ci_computer") if r.get(ownf)}
-assert snow_owner_names, "owner names came back empty — the check below would be vacuous"
+assert snow_owner_names, "owner names came back empty, the check below would be vacuous"
 iam_logins = {u["profile"]["login"] for u in c.get(
     "/iam/api/v1/users", params={"limit": 1000}).json()}
 check("the IdP names people by login, not by the name other lenses show",
@@ -298,7 +298,7 @@ check("polling with next_since returns no duplicates", not overlap,
 backdated = [f for f in second["findings"]
              if f["first_found"] < min(x["first_found"] for x in first["findings"])]
 check("late-arriving records carry an older first_found than the checkpoint",
-      True, f"{len(backdated)} backdated findings in page 2 — connectors must not "
+      True, f"{len(backdated)} backdated findings in page 2, connectors must not "
             f"assume first_found is monotonic")
 openf = c.get("/scanner/api/v3/findings", params={"limit": 200, "state": "OPEN"}).json()
 check("scanner honours the state filter",
@@ -322,7 +322,7 @@ check("HR paginates by page number and reports total_pages",
       len(workers) == hr_total, f"{len(workers)} workers across the declared pages")
 check("HR is structurally blind to contractors",
       all(w["worker_type"] == "Employee" for w in workers) and hr_total < 500,
-      f"{hr_total} of 500 people — the rest are engaged through vendor management")
+      f"{hr_total} of 500 people, the rest are engaged through vendor management")
 leavers = [w for w in workers if w["termination_date"]]
 check("HR is the system of record for terminations",
       len(leavers) > 0, f"{len(leavers)} workers carry a termination date")
@@ -366,7 +366,7 @@ active_idp = [u for u in idp if u["status"] == "ACTIVE"]
 no_date = [u for u in active_idp if not u["profile"].get("terminationDate")]
 check("the IdP does not hand you leaver status for orphaned accounts",
       len(no_date) == len(active_idp),
-      "every ACTIVE user has no termination date — the workflow never ran")
+      "every ACTIVE user has no termination date, the workflow never ran")
 joined = [u for u in active_idp
           if hr_by_email.get(u["profile"]["email"], {}).get("termination_date")]
 check("joining HR to the IdP surfaces orphaned access",
@@ -378,7 +378,7 @@ check("HR and the IdP share no identifier for the same person",
       not (hr_ids & idp_logins),
       f"employee_id vs login, {len(hr_ids)} vs {len(idp_logins)}, zero overlap")
 
-# ---- 4g. the day-one domains DESIGN.md §3 names
+# ---- 4g. the day-one domains DESIGN.md #3 names
 print("\nGovernance depth")
 pol = pages("/grc/api/v1/policies")
 check("policies are published with their implementing control count",
@@ -388,7 +388,7 @@ exc = pages("/grc/api/v1/exceptions", status="active")
 lapsed = [e for e in exc if dt.date.fromisoformat(e["expires_on"]) < as_of]
 check("exceptions read 'active' after their expiry date has passed",
       len(lapsed) > 0,
-      f"{len(lapsed)} of {len(exc)} — the platform asserts status, the calendar disagrees")
+      f"{len(lapsed)} of {len(exc)}, the platform asserts status, the calendar disagrees")
 trt = pages("/grc/api/v1/treatments")
 overdue_t = [t for t in trt if t["status"] == "overdue"]
 check("risk treatments carry a strategy, an owner and a target date",
@@ -430,7 +430,7 @@ gm = c.get(f"/iam/api/v1/users/{someone}/groups").json()
 check("group membership is retrievable per user, with revocation dates",
       isinstance(gm, list), f"{len(gm)} memberships for {someone}")
 
-# ---- 4d. provenance: is any of this evidence? (DESIGN.md §5)
+# ---- 4d. provenance: is any of this evidence? (DESIGN.md #5)
 print("\nProvenance")
 prov = c.get("/_provenance").json()
 routes_documented = set()
@@ -513,7 +513,7 @@ if mode == "static":
     check("a wrong static token is rejected", r.status_code == 401, f"HTTP {r.status_code}")
     r = httpx.get(BASE + "/grc/api/v1/controls", timeout=20)
     check("a missing token is rejected", r.status_code == 401, f"HTTP {r.status_code}")
-    print("        (VO_AUTH_MODE=jwks is verified separately — see README)")
+    print("        (VO_AUTH_MODE=jwks is verified separately, see README)")
 else:
     kc = os.environ.get("VO_KEYCLOAK_BASE", "http://127.0.0.1:8081")
     tok = httpx.post(f"{kc}/realms/virtualorg/protocol/openid-connect/token",
@@ -530,7 +530,7 @@ else:
                      headers={"Authorization": "Bearer vo-dev-token"}, timeout=20)
     check("a static token is rejected in jwks mode", stat.status_code == 401, f"HTTP {stat.status_code}")
 
-# ---- 4f. framework / taxonomy sync and binary evidence (DESIGN.md §5)
+# ---- 4f. framework / taxonomy sync and binary evidence (DESIGN.md #5)
 print("\nFrameworks and crosswalks")
 fw = c.get("/grc/api/v1/frameworks").json()["frameworks"]
 check("more than one framework is published",
@@ -550,7 +550,7 @@ m_csf = pages("/grc/api/v1/control-mappings", framework="NIST CSF")
 shared = {m["control_reference"] for m in m_iso} & {m["control_reference"] for m in m_csf}
 check("controls map into both frameworks with different strengths",
       len(shared) > 0,
-      f"{len(shared)} controls carry mappings in both — one failure moves two numbers")
+      f"{len(shared)} controls carry mappings in both, one failure moves two numbers")
 
 print("\nBinary evidence")
 fnd = pages("/grc/api/v1/findings")

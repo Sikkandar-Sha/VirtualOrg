@@ -9,6 +9,15 @@ That belongs in a lens loss profile or in `lens_visibility`. The moment the worl
 starts lying, ground truth stops meaning anything and the whole project is just a
 database with extra steps.
 
+## House style
+
+No em dashes. They read as machine-written, and this project is meant to read as
+though a person wrote it. Use a full stop, a colon, a semicolon, or a comma pair,
+whichever the join actually calls for. CI fails on an em dash in any tracked file
+except `DESIGN.md`, which keeps its author's voice.
+
+Section references use `#5`, not the section symbol.
+
 ## Branches
 
 | Branch | Purpose |
@@ -60,5 +69,5 @@ that already exists byte-identical.
 
 ## Things that are deliberately not here
 
-Real vendor products, log pipelines, attack tooling. See DESIGN.md §11 for why each was
+Real vendor products, log pipelines, attack tooling. See DESIGN.md #11 for why each was
 cut. Please read it before proposing one of them back.

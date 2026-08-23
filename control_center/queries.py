@@ -1,7 +1,7 @@
 """
 Every query the Control Center makes. The ONLY place that touches world-db.
 
-DESIGN.md §8: "If a number appears in the UI it must be a query, never a
+DESIGN.md #8: "If a number appears in the UI it must be a query, never a
 computation." So this module returns rows and counts; it does not aggregate,
 score, weight or infer. Anything that looks like business logic belongs in the
 kit under test, not in the harness that grades it.
@@ -347,10 +347,10 @@ def attribution_corpus():
                        FROM evidence""")
 
 
-# ------------------------------------------- where the graph breaks (§7 absence)
+# ------------------------------------------- where the graph breaks (#7 absence)
 # Per-table row counts make a table with 25 rows look healthy whether or not those
 # rows are wired into the spine. These are the cross-table queries that tell the
-# difference. DESIGN.md §7: "For an SSOT, silence must be distinguishable from
+# difference. DESIGN.md #7: "For an SSOT, silence must be distinguishable from
 # health." Each gap records whether the kit could even see it through the APIs.
 SPINE_GAPS = [
     ("applications attached to no business service", "application",
@@ -358,7 +358,7 @@ SPINE_GAPS = [
           SELECT 1 FROM service_dependency d WHERE d.application_id = a.id)""",
      "SELECT count(*) n FROM application", True,
      "Nothing depends on them, so they carry no inherited criticality. Now a tuned, "
-     "deliberate slice recorded in world.expectation — and discoverable, by diffing "
+     "deliberate slice recorded in world.expectation, and discoverable, by diffing "
      "cmdb_ci_appl against the parents of cmdb_rel_ci."),
 
     ("business services with no application", "business_service",
@@ -381,7 +381,7 @@ SPINE_GAPS = [
           AND NOT EXISTS (SELECT 1 FROM application_asset x WHERE x.asset_id = a.id)""",
      """SELECT count(*) n FROM asset WHERE decommissioned_on IS NULL
           AND kind IN ('server','cloud')""", True,
-     "Infrastructure nothing is known to run on. Endpoints are excluded — they never "
+     "Infrastructure nothing is known to run on. Endpoints are excluded, they never "
      "carry an application in this world."),
 
     ("live assets invisible to every security lens", "asset",
@@ -390,13 +390,13 @@ SPINE_GAPS = [
                            WHERE v.entity_id = a.id AND v.entity_kind = 'asset'
                              AND v.lens_id = 'splunk')""",
      "SELECT count(*) n FROM asset WHERE decommissioned_on IS NULL", True,
-     "The absence family's headline. Recorded as expectations — scoreable."),
+     "The absence family's headline. Recorded as expectations, scoreable."),
 
     ("controls with no evidence of any kind", "control",
      """SELECT count(*) n FROM control c WHERE NOT EXISTS (
           SELECT 1 FROM evidence e WHERE e.control_id = c.id AND NOT e.is_trap)""",
      "SELECT count(*) n FROM control", True,
-     "Never operationalised. Recorded as expectations — scoreable."),
+     "Never operationalised. Recorded as expectations, scoreable."),
 
     ("controls mapped to no requirement", "control",
      """SELECT count(*) n FROM control c WHERE NOT EXISTS (
@@ -420,7 +420,7 @@ SPINE_GAPS = [
      """SELECT count(*) n FROM business_service s JOIN person p
           ON p.id = s.owner_person_id WHERE p.ended_on IS NOT NULL""",
      "SELECT count(*) n FROM business_service", True,
-     "Owner name is now exposed on cmdb_ci_service — but not the fact that they left."),
+     "Owner name is now exposed on cmdb_ci_service, but not the fact that they left."),
 
     ("controls whose owner has left", "control",
      """SELECT count(*) n FROM control c JOIN person p
@@ -433,7 +433,7 @@ SPINE_GAPS = [
           AND owner_person_id IS NULL""",
      "SELECT count(*) n FROM asset WHERE decommissioned_on IS NULL", True,
      "By construction, not by accident: only endpoints are given an owner. Server and "
-     "cloud ownership is simply not modelled — worth knowing before you build a report "
+     "cloud ownership is simply not modelled, worth knowing before you build a report "
      "that assumes every asset has a custodian."),
 ]
 

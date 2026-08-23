@@ -4,7 +4,7 @@
 <div class="eyebrow">Surface 0 · is everything running</div>
 <h1>{% if bad %}{{ bad|length }} dependency needs attention{% else %}All systems live{% endif %}</h1>
 <p class="lede">Each row below is a real request, made now. Nothing here is read from the
-  Docker daemon — a container can be “running” and still answer wrongly.</p>
+  Docker daemon, a container can be “running” and still answer wrongly.</p>
 
 <div class="status" style="margin-top:22px">
   {% for p in probes %}
@@ -21,12 +21,12 @@
 
 {% if not prov.certified %}
 <div class="verdict warn">
-  <div class="eyebrow">Fidelity — read before trusting a green run</div>
+  <div class="eyebrow">Fidelity, read before trusting a green run</div>
   <p>No twin here is verified against a vendor artefact. Every response shape was
     written from our understanding of the documented behaviour, so a connector and a
     twin can be wrong together and CI will stay green.
     <b>{{ prov.unverified | length }} of {{ prov.lenses | length }} lenses are
-    unverified.</b> Passing tests show the kit agrees with this environment — not
+    unverified.</b> Passing tests show the kit agrees with this environment, not
     that either agrees with the vendor.
     <a href="/manual?ch=api">See the manifests →</a></p>
 </div>
