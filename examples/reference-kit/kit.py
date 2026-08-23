@@ -22,6 +22,7 @@ Run it against a live VirtualOrg, then score the result:
 import datetime as dt
 import json
 import os
+import re
 import sys
 
 import httpx
@@ -150,7 +151,9 @@ def main():
     STOP = {"and", "of", "the", "to", "a", "in", "on", "for", "control"}
 
     def words(s):
-        return {w.strip("-").lower() for w in s.replace("—", " ").split()} - STOP
+        # split on anything that is not a word character, so punctuation in a title
+        # never becomes part of a token
+        return {w.lower() for w in re.split(r"\W+", s) if w} - STOP
 
     controls = cursor_pages("/grc/api/v1/controls")
     ctl_words = [(x["reference"], words(x["title"])) for x in controls]

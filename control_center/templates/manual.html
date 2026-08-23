@@ -379,6 +379,18 @@
     about the kit, never about the vendor.</p>
 </div>
 
+<h2>Harness endpoints, which a kit must not call</h2>
+<p class="note">These are served by the Control Center on its own port, not by the twin.
+  They exist for the harness and for scoring, and a product under test has no business
+  reading them.</p>
+<div class="wrap"><table>
+  <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+  <tr><td class="id">GET</td><td class="id"><b>/export/groundtruth</b></td>
+      <td class="dim">The answer key: every expectation, every evidence link with its trap flag, and the identifier aliases the scorer resolves through.</td></tr>
+  <tr><td class="id">GET</td><td class="id"><b>/healthz</b></td>
+      <td class="dim">Liveness of the Control Center and everything it can reach.</td></tr>
+</table></div>
+
 <h2>Pagination contracts</h2>
 <div class="wrap"><table>
   <tr><th>Lens</th><th>Request</th><th>Response carries</th><th>Stop when</th></tr>
@@ -499,6 +511,42 @@
       <td>{{ f.claim }}</td><td class="num">{{ f.n }}</td></tr>
   {% endfor %}
 </table></div>
+
+<h2>Score your product</h2>
+<p class="note"><code>scripts/score</code> reads what your product concluded and reports
+  precision and recall per family, plus exactly which of the
+  {{ "{:,}".format(corpus.traps) }} traps it fell for.</p>
+<pre>python3 examples/reference-kit/kit.py &gt; posture.json
+./scripts/score posture.json</pre>
+<p class="note">The contract is deliberately small. Findings match on the
+  <code>(family, subject_kind, subject_id)</code> triple and never on claim text, so it
+  measures whether the right thing was found rather than how it was phrased.</p>
+<pre>{
+  "meta": { "world_seed": {{ meta.seed }}, "as_of": "{{ meta.as_of }}",
+            "generator_version": "{{ meta.generator_version }}" },
+  "findings":     [{ "family": "conflict", "subject_kind": "control", "subject_id": "C-017" }],
+  "attributions": [{ "evidence_id": "ALR-009852", "control_id": "C-011" }]
+}</pre>
+<p class="note">Emit whatever identifier the vendor API gave you. The scorer resolves
+  <code>C-017</code>, <code>lt-4069.corp.local</code>, an agent uuid or a staff number
+  back to the canonical entity, because that is the same entity-resolution problem your
+  product already had to solve. It refuses to score a posture produced from a different
+  world, because comparing answers to the wrong answer key is worse than not scoring.</p>
+
+<div class="verdict warn">
+  <div class="eyebrow">Where the answer key lives</div>
+  <p>The scorer reads ground truth from the Control Center at
+    <code>/export/groundtruth</code>, never from a twin. A kit that could fetch its own
+    marking scheme would not be measuring anything, so the answer key is reachable only
+    from the harness side of the boundary.</p>
+</div>
+
+<h2>A worked example</h2>
+<p class="note"><code>examples/reference-kit/</code> is a small, readable consumer that
+  produces a scoreable posture. It is deliberately naive: it attributes alerts to
+  controls by matching words in the detection rule name against words in the control
+  title, which is exactly the inference the traps exist to punish. Its score is what that
+  approach is worth, and it is a useful floor to beat.</p>
 
 <h2>Scoring attribution</h2>
 <p class="note">Nothing in any vendor API links a detection to a control, that inference is
