@@ -197,7 +197,10 @@ UNREACHABLE = {
                   "every HR worker, as `organization` and `cost_center`.",
     "lens": "Exposed only through /_lens/{id}, which is not a vendor endpoint.",
     "lens_visibility": "Not exposed.",
-    "world_meta": "Exposed through /healthz only.",
+    "world_meta": "The twin gateway exposes it on /healthz to an authenticated "
+                  "caller only, because these values reproduce the world. This "
+                  "Control Center is unauthenticated and serves them freely, so "
+                  "keep a kit under test off this port.",
 }
 
 

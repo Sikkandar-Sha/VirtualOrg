@@ -4,18 +4,12 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-# The README tells you to set ports in .env, which only docker compose reads by
-# default. Read it here too, without overriding anything already exported.
-if [ -f .env ]; then
-  while IFS='=' read -r k v; do
-    case "$k" in ''|\#*) continue;; esac
-    v="${v%%[[:space:]]#*}"; v="${v%"${v##*[![:space:]]}"}"
-    eval "current=\${$k-}"
-    [ -n "$current" ] || export "$k=$v"
-  done < .env
-fi
+. "$(dirname "$0")/_dotenv.sh"
+vo_load_dotenv
 
-TOKEN="${VO_TOKEN:-vo-dev-token}"
+# VO_TOKENS is the documented knob in .env; VO_TOKEN is a convenience override.
+TOKENS="${VO_TOKENS:-vo-dev-token}"
+TOKEN="${VO_TOKEN:-${TOKENS%%,*}}"
 TWIN="${VO_BASE:-http://127.0.0.1:8080}"
 CC="${VO_CC_BASE:-http://127.0.0.1:${VO_CC_PORT:-3000}}"
 KC="${VO_KEYCLOAK_BASE:-http://127.0.0.1:8081}"

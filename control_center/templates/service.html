@@ -50,7 +50,7 @@
     <tr><th>Ref</th><th>Title</th><th class="num">Sev</th><th>Stated impact</th></tr>
     {% for i in incidents %}
     <tr><td class="id">{{ i.ref }}</td><td>{{ i.title }}</td><td class="num">{{ i.severity }}</td>
-        <td>{% if s.criticality == 'tier1' and i.stated_impact == 'no customer impact' and i.severity <= 2 %}
+        <td>{% if i.flagged %}
               <span class="tag conflict">{{ i.stated_impact }}</span>
             {% else %}<span class="dim">{{ i.stated_impact }}</span>{% endif %}</td></tr>
     {% endfor %}

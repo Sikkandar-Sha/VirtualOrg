@@ -102,49 +102,52 @@ def asset_expectations(asset_id):
 
 
 def assets(limit=100, offset=0, q=None, kind=None, invisible_to=None):
-    sql = """SELECT a.id, a.hostname, a.fqdn, a.asset_tag, a.ip, a.kind, a.criticality,
+    q_sql = """SELECT a.id, a.hostname, a.fqdn, a.asset_tag, a.ip, a.kind, a.criticality,
                     a.decommissioned_on, p.full_name AS owner_name
                FROM asset a LEFT JOIN person p ON p.id = a.owner_person_id
               WHERE 1=1"""
     params = []
     if q:
-        sql += """ AND (a.id ILIKE %s OR a.hostname ILIKE %s OR a.fqdn ILIKE %s
+        q_sql += """ AND (a.id ILIKE %s OR a.hostname ILIKE %s OR a.fqdn ILIKE %s
                         OR a.asset_tag ILIKE %s OR host(a.ip) ILIKE %s)"""
         params += [f"%{q}%"] * 5
     if kind:
-        sql += " AND a.kind = %s"
+        q_sql += " AND a.kind = %s"
         params.append(kind)
     if invisible_to:
-        sql += """ AND a.id NOT IN (SELECT entity_id FROM lens_visibility
+        q_sql += """ AND a.id NOT IN (SELECT entity_id FROM lens_visibility
                                      WHERE lens_id = %s AND entity_kind = 'asset')"""
         params.append(invisible_to)
-    sql += " ORDER BY a.id LIMIT %s OFFSET %s"
+    q_sql += " ORDER BY a.id LIMIT %s OFFSET %s"
     params += [limit, offset]
-    return db.q(sql, tuple(params))
+    return db.q(q_sql, tuple(params))
 
 
 def asset_total(q=None, kind=None, invisible_to=None):
-    sql = "SELECT count(*) n FROM asset a WHERE 1=1"
+    q_sql = "SELECT count(*) n FROM asset a WHERE 1=1"
     params = []
     if q:
-        sql += """ AND (a.id ILIKE %s OR a.hostname ILIKE %s OR a.fqdn ILIKE %s
+        q_sql += """ AND (a.id ILIKE %s OR a.hostname ILIKE %s OR a.fqdn ILIKE %s
                         OR a.asset_tag ILIKE %s OR host(a.ip) ILIKE %s)"""
         params += [f"%{q}%"] * 5
     if kind:
-        sql += " AND a.kind = %s"
+        q_sql += " AND a.kind = %s"
         params.append(kind)
     if invisible_to:
-        sql += """ AND a.id NOT IN (SELECT entity_id FROM lens_visibility
+        q_sql += """ AND a.id NOT IN (SELECT entity_id FROM lens_visibility
                                      WHERE lens_id = %s AND entity_kind = 'asset')"""
         params.append(invisible_to)
-    return db.one(sql, tuple(params))["n"]
+    return db.one(q_sql, tuple(params))["n"]
 
 
 # ------------------------------------------------------- surface 2: the spine
 def services():
     return db.q("""SELECT s.*, p.full_name AS owner_name
                      FROM business_service s LEFT JOIN person p ON p.id = s.owner_person_id
-                    ORDER BY s.criticality DESC, s.id""")
+                    -- criticality is an ordered category stored as text, so a plain
+                    -- DESC sorts it alphabetically and puts tier3 above tier1
+                    ORDER BY array_position(ARRAY['tier3','tier2','tier1'],
+                                            s.criticality) DESC, s.id""")
 
 
 def service(service_id):
@@ -177,13 +180,25 @@ def service_risks(service_id):
 
 
 def service_incidents(service_id):
-    return db.q("""SELECT ref, title, severity, opened_at, closed_at, stated_impact
-                     FROM incident WHERE service_id = %s
-                    ORDER BY opened_at DESC LIMIT 15""", (service_id,))
+    """Incidents on a service, each carrying whether the answer key flags it.
+
+    `flagged` comes from world.expectation rather than from a rule restated in the
+    template. The template used to re-encode the generator's planting condition by
+    hand and had already drifted from it: 23 incidents matched the hand-written rule
+    while the catalogue held 13, so the page contradicted the thing it is meant to
+    illustrate."""
+    return db.q("""SELECT i.ref, i.title, i.severity, i.opened_at, i.closed_at,
+                          i.stated_impact,
+                          EXISTS (SELECT 1 FROM expectation x
+                                   WHERE x.subject_kind = 'incident'
+                                     AND x.subject_id = i.id
+                                     AND x.family = 'conflict') AS flagged
+                     FROM incident i WHERE i.service_id = %s
+                    ORDER BY i.opened_at DESC LIMIT 15""", (service_id,))
 
 
 def controls(limit=200, offset=0, q=None):
-    sql = """SELECT c.id, c.ref, c.title, c.test_frequency, c.automated,
+    q_sql = """SELECT c.id, c.ref, c.title, c.test_frequency, c.automated,
                     p.full_name AS owner_name, p.ended_on AS owner_ended_on,
                     t.tested_on AS last_tested_on, t.result AS last_result,
                     (SELECT count(*) FROM finding f
@@ -198,27 +213,25 @@ def controls(limit=200, offset=0, q=None):
               WHERE 1=1"""
     params = []
     if q:
-        sql += " AND (c.ref ILIKE %s OR c.title ILIKE %s)"
+        q_sql += " AND (c.ref ILIKE %s OR c.title ILIKE %s)"
         params += [f"%{q}%"] * 2
-    sql += " ORDER BY c.ref LIMIT %s OFFSET %s"
+    q_sql += " ORDER BY c.ref LIMIT %s OFFSET %s"
     params += [limit, offset]
-    return db.q(sql, tuple(params))
+    return db.q(q_sql, tuple(params))
 
 
 def control(control_id):
     return db.one("""SELECT c.*, p.full_name AS owner_name, p.ended_on AS owner_ended_on,
                             p.id AS owner_id
                        FROM control c LEFT JOIN person p ON p.id = c.owner_person_id
-                      WHERE c.id = %s OR c.ref = %s""", (control_id, control_id))
+                      WHERE c.id = %s OR c.ref = %s
+                      ORDER BY c.id LIMIT 1""", (control_id, control_id))
 
 
-def control_evidence(control_id, include_traps=True):
-    sql = """SELECT e.id, e.kind, e.source_ref, e.strength, e.observed_at, e.is_trap
-               FROM evidence e WHERE e.control_id = %s"""
-    if not include_traps:
-        sql += " AND NOT e.is_trap"
-    sql += " ORDER BY e.observed_at DESC LIMIT 200"
-    return db.q(sql, (control_id,))
+    q_sql = """SELECT e.id, e.kind, e.source_ref, e.strength, e.observed_at, e.is_trap
+               FROM evidence e WHERE e.control_id = %s
+               ORDER BY e.observed_at DESC LIMIT 200"""
+    return db.q(q_sql, (control_id,))
 
 
 def control_evidence_summary(control_id):
@@ -283,19 +296,19 @@ def org_counts():
 
 
 def people(limit=100, offset=0, q=None, leavers_only=False):
-    sql = """SELECT p.id, p.full_name, p.email, p.title, p.employment,
+    q_sql = """SELECT p.id, p.full_name, p.email, p.title, p.employment,
                     p.started_on, p.ended_on, d.name AS department
                FROM person p JOIN department d ON d.id = p.department_id
               WHERE 1=1"""
     params = []
     if q:
-        sql += " AND (p.id ILIKE %s OR p.full_name ILIKE %s OR p.email ILIKE %s)"
+        q_sql += " AND (p.id ILIKE %s OR p.full_name ILIKE %s OR p.email ILIKE %s)"
         params += [f"%{q}%"] * 3
     if leavers_only:
-        sql += " AND p.ended_on IS NOT NULL"
-    sql += " ORDER BY p.id LIMIT %s OFFSET %s"
+        q_sql += " AND p.ended_on IS NOT NULL"
+    q_sql += " ORDER BY p.id LIMIT %s OFFSET %s"
     params += [limit, offset]
-    return db.q(sql, tuple(params))
+    return db.q(q_sql, tuple(params))
 
 
 def person(person_id):
@@ -345,31 +358,33 @@ def expectation_subject_counts():
 
 
 def expectations(family=None, limit=200, offset=0):
-    sql = "SELECT * FROM expectation WHERE 1=1"
+    q_sql = "SELECT * FROM expectation WHERE 1=1"
     params = []
     if family:
-        sql += " AND family = %s"
+        q_sql += " AND family = %s"
         params.append(family)
-    sql += " ORDER BY id LIMIT %s OFFSET %s"
+    q_sql += " ORDER BY id LIMIT %s OFFSET %s"
     params += [limit, offset]
-    return db.q(sql, tuple(params))
+    return db.q(q_sql, tuple(params))
 
 
 def expectation_total(family=None):
-    sql = "SELECT count(*) n FROM expectation WHERE 1=1"
+    q_sql = "SELECT count(*) n FROM expectation WHERE 1=1"
     params = []
     if family:
-        sql += " AND family = %s"
+        q_sql += " AND family = %s"
         params.append(family)
-    return db.one(sql, tuple(params))["n"]
+    return db.one(q_sql, tuple(params))["n"]
 
 
 def attribution_corpus():
     """Precision/recall denominators for the attribution family.
 
-    Both the planted totals and the retrievable ones. A page that shows only the
-    planted count tells a reader they face 752 decoys when the APIs will only ever
-    hand them 247, which is the number `scripts/score` reports against."""
+    Both the planted totals and the retrievable ones, because a page showing only
+    the planted count tells a reader they face every decoy in the world when the APIs
+    will hand them a fraction of that. The retrievable figures are the ones
+    `scripts/score` reports against. Exact values move with the seed, so they are
+    deliberately not restated here."""
     reach = {r["id"] for r in groundtruth_export()["evidence"] if r["reachable"]}
     row = dict(db.one("""SELECT count(*) FILTER (WHERE NOT is_trap) AS true_links,
                                 count(*) FILTER (WHERE is_trap)     AS traps,
@@ -422,7 +437,10 @@ SPINE_GAPS = [
      """SELECT count(*) n FROM world.asset a WHERE a.decommissioned_on IS NULL
           AND NOT EXISTS (SELECT 1 FROM world.lens_visibility v
                            WHERE v.entity_id = a.id AND v.entity_kind = 'asset'
-                             AND v.lens_id IN ('splunk', 'scanner', 'edr'))""",
+                             -- derived from lens.category so this cannot drift from the generator's
+                             -- SECURITY_LENSES the way two hardcoded lists would
+                             AND v.lens_id IN (SELECT id FROM lens
+                                                WHERE category IN ('siem','vuln','edr')))""",
      "SELECT count(*) n FROM world.asset WHERE decommissioned_on IS NULL", True,
      "The absence family's headline. Recorded as expectations, scoreable."),
 
@@ -504,7 +522,10 @@ def processes():
                      LEFT JOIN process_service ps ON ps.process_id = b.id
                     GROUP BY b.id, b.name, b.criticality, b.rto_hours,
                              p.full_name, p.ended_on
-                    ORDER BY b.criticality DESC, b.name""")
+                    -- same ordered-category problem: alphabetically 'medium' beats
+                    -- 'critical', which put the two critical processes last
+                    ORDER BY array_position(ARRAY['low','medium','high','critical'],
+                                            b.criticality) DESC, b.name""")
 
 
 def service_processes(service_id):
@@ -553,11 +574,16 @@ def groundtruth_export():
     for r in db.q("SELECT id, name FROM business_service"):
         alias += [("business_service", r["id"], r["id"]),
                   ("business_service", r["name"], r["id"])]
+    # business_process was the only kind with no identity alias, so `BP-01` resolved
+    # only by falling through, and `bp-01` did not resolve at all.
+    for r in db.q("SELECT id, name FROM business_process"):
+        alias += [("business_process", r["id"], r["id"]),
+                  ("business_process", r["name"], r["id"])]
     for r in db.q("SELECT entity_kind, entity_id, external_id FROM lens_visibility"):
         alias.append((r["entity_kind"], r["external_id"], r["entity_id"]))
 
-    # An alias that names more than one entity resolves to none of them. 90 IP
-    # addresses are shared by 228 assets, because the world recycles them on purpose;
+    # An alias that names more than one entity resolves to none of them. 84 IP
+    # addresses are shared by 207 assets, because the world recycles them on purpose;
     # silently picking whichever row came last would hand the scorer a wrong entity
     # and charge the kit a false positive and a false negative for it.
     seen, ambiguous = {}, set()
@@ -573,9 +599,23 @@ def groundtruth_export():
         "world": {r["key"]: r["value"] for r in db.q("SELECT key, value FROM world_meta")},
         "expectations": [
             {"id": r["id"], "family": r["family"], "subject_kind": r["subject_kind"],
-             "subject_id": r["subject_id"], "claim": r["claim"]}
-            for r in db.q("""SELECT id, family, subject_kind, subject_id, claim
-                               FROM expectation ORDER BY id""")],
+             "subject_id": r["subject_id"], "claim": r["claim"],
+             "reachable": r["reachable"]}
+            # `reachable` marks whether any lens exposes the evidence a kit would need
+            # to reach this conclusion. Attribution recall has been corrected for this
+            # since the denominators were fixed; findings recall was not, so a kit was
+            # scored against conclusions no API supports. Privileged-group membership
+            # is planted on AD groups, and the IAM lens serves Okta groups only.
+            for r in db.q("""
+                SELECT e.id, e.family, e.subject_kind, e.subject_id, e.claim,
+                       NOT (e.claim LIKE '%%privileged group%%'
+                            AND NOT EXISTS (
+                              SELECT 1 FROM account a
+                                JOIN group_membership m ON m.account_id = a.id
+                                JOIN access_group g ON g.id = m.group_id AND g.privileged
+                               WHERE a.person_id = e.subject_id AND a.system = 'okta'
+                                 AND m.revoked_on IS NULL)) AS reachable
+                  FROM expectation e ORDER BY e.id""")],
         # source_ref too: a kit sees an alert id or a finding id, never an evidence id,
         # so it can only ever name the source record it was reasoning about.
         #
@@ -603,6 +643,11 @@ def groundtruth_export():
                          WHEN e.kind = 'control_test' THEN false
                          -- every finding is listed, with no visibility filter
                          WHEN e.kind = 'finding' THEN true
+                         -- schema.sql permits 'incident' and 'vulnerability' too.
+                         -- The generator emits neither today; if it ever does, an
+                         -- ELSE false would silently drop them from the recall
+                         -- denominator, which is a wrong answer key with no error.
+                         WHEN e.kind IN ('incident', 'vulnerability') THEN true
                          WHEN e.kind = 'alert' THEN EXISTS (
                            SELECT 1 FROM alert a
                              JOIN lens_visibility v ON v.entity_id = a.asset_id
@@ -615,8 +660,10 @@ def groundtruth_export():
                          ELSE false
                        END AS reachable
                   FROM evidence e ORDER BY e.id""")],
-        "aliases": [{"kind": k, "alias": str(a).strip().lower(), "id": i}
-                    for k, a, i in alias
-                    if a and (k, str(a).strip().lower()) not in ambiguous],
+        # Emitted from the deduplicated map, not the raw list: re-iterating `alias`
+        # shipped 1,522 duplicate rows, a quarter of the payload, for no benefit.
+        "aliases": [{"kind": k, "alias": a, "id": i}
+                    for (k, a), i in sorted(seen.items())
+                    if (k, a) not in ambiguous],
         "ambiguous_aliases": [{"kind": k, "alias": a} for k, a in sorted(ambiguous)],
     }

@@ -13,7 +13,7 @@ argue with instead of a benchmark they run.
 
     {
       "meta": {"world_seed": 48392, "as_of": "2026-08-21", "scale": 1.0,
-               "chaos": 1, "generator_version": "4"},
+               "chaos": 1, "generator_version": "6"},
       "findings":     [{"family": "conflict", "subject_kind": "control", "subject_id": "CTL-017"}],
       "attributions": [{"evidence_id": "EVD-000123", "control_id": "CTL-045"}]
     }
@@ -32,22 +32,8 @@ import httpx
 # The answer key comes from the Control Center, never from the twins: a kit that
 # could fetch its own marking scheme would not be measuring anything. It also means
 # this runs against a remote VirtualOrg with nothing installed but httpx.
-def _dotenv(name, default):
-    """The README tells you to set ports in .env, which only docker compose reads.
-    An exported variable still wins; this just stops the documented edit from
-    silently having no effect here."""
-    if os.environ.get(name):
-        return os.environ[name]
-    try:
-        with open(os.path.join(os.path.dirname(__file__), "..", ".env")) as fh:
-            for line in fh:
-                line = line.strip()
-                if line.startswith(name + "="):
-                    return line.split("=", 1)[1].split("#")[0].strip() or default
-    except OSError:
-        pass
-    return default
-
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _dotenv import dotenv as _dotenv          # noqa: E402  one parser, see _dotenv.py
 
 CC = _dotenv("VO_CC_BASE", "") or f"http://127.0.0.1:{_dotenv('VO_CC_PORT', '3000')}"
 
@@ -88,11 +74,14 @@ def resolve(alias, kind, value):
 
 
 def load_truth(gt):
-    truth, claims = {}, {}
+    truth, claims, reach = {}, {}, {}
     for r in gt["expectations"]:
         key = (r["family"], r["subject_kind"], r["subject_id"])
         truth.setdefault(key, []).append(r["id"])
         claims.setdefault(key, []).append(r["claim"])
+        # A subject is reachable if ANY of its rows is: one supporting claim is enough
+        # for a kit to reach the conclusion.
+        reach[key] = reach.get(key, False) or r.get("reachable", True)
     # Keyed by evidence id AND by the source record it came from, because a kit sees
     # `ALR-000123` from Splunk and cannot know the evidence row is `EVD-000456`. Both
     # keys resolve to the SAME canonical row id, so claiming one link under both
@@ -103,7 +92,7 @@ def load_truth(gt):
         ev[r["id"]] = row
         if r.get("source_ref"):
             ev.setdefault(r["source_ref"], row)
-    return truth, claims, ev
+    return truth, claims, ev, reach
 
 
 def check_world(meta, live):
@@ -128,12 +117,34 @@ def main():
     ap = argparse.ArgumentParser(description="Score a posture against VirtualOrg ground truth")
     ap.add_argument("posture", help="JSON file produced by the kit under test")
     ap.add_argument("--json", action="store_true", help="emit machine-readable JSON")
-    ap.add_argument("--traps", type=int, default=10, help="how many traps to list (default 10)")
+    ap.add_argument("--traps", type=lambda v: max(0, int(v)), default=10, help="how many traps to list (default 10)")
     ap.add_argument("--force", action="store_true",
                     help="score even if the world does not match (do not do this)")
     a = ap.parse_args()
 
-    posture = json.load(open(a.posture))
+    try:
+        with open(a.posture) as fh:
+            posture = json.load(fh)
+    except FileNotFoundError:
+        print(f"no such file: {a.posture}", file=sys.stderr)
+        return 2
+    except json.JSONDecodeError as e:
+        print(f"{a.posture} is not valid JSON: {e}", file=sys.stderr)
+        return 2
+    if not isinstance(posture, dict):
+        print(f"{a.posture} must be a JSON object with `meta`, `findings` and "
+              f"`attributions`; found {type(posture).__name__}.", file=sys.stderr)
+        return 2
+    for _field in ("findings", "attributions"):
+        _v = posture.get(_field, [])
+        if not isinstance(_v, list):
+            print(f"`{_field}` must be a list, found {type(_v).__name__}.", file=sys.stderr)
+            return 2
+        for _i, _item in enumerate(_v):
+            if not isinstance(_item, dict):
+                print(f"`{_field}[{_i}]` must be an object, found "
+                      f"{type(_item).__name__}.", file=sys.stderr)
+                return 2
     gt = fetch(CC)
     live = gt["world"]
     mismatch = check_world(posture.get("meta", {}), live)
@@ -145,7 +156,7 @@ def main():
               "Regenerate, or pass --force if you truly mean to.", file=sys.stderr)
         return 2
 
-    truth, claims, evidence = load_truth(gt)
+    truth, claims, evidence, reach = load_truth(gt)
 
     # ---- findings
     alias = load_aliases(gt)
@@ -289,6 +300,14 @@ def main():
     f = result["findings"]
     print(f"  {'all':<13}{f['tp'] + f['fn']:>9}{f['tp'] + f['fp']:>9}{f['tp']:>9}"
           f"{f['fn']:>8}{f['fp']:>10}{fmt(f['precision']):>11}{fmt(f['recall']):>9}")
+    _unreach = sorted(k for k in truth if not reach.get(k, True))
+    if _unreach:
+        # Attribution recall has been corrected for reachability since the
+        # denominators were fixed. Say the same thing here rather than quietly
+        # scoring a kit against conclusions no API supports.
+        print(f"  {len(_unreach)} of those subjects are not reachable through any lens, so a")
+        print( "  flawless kit cannot claim them. Their evidence exists in the world but")
+        print( "  no vendor API exposes it, e.g. privileged group membership held in AD.")
 
     if ignored_attribution:
         print(f"  {ignored_attribution:,} finding{'' if ignored_attribution == 1 else 's'} in the attribution family {'is' if ignored_attribution == 1 else 'are'} not scored")

@@ -94,7 +94,7 @@
 </div>
 </div>
 
-<h2>Evidence rows ({{ evidence|length }})</h2>
+<h2>Evidence rows ({{ evidence|length }}{% if evidence|length > 60 %}, showing 60{% endif %})</h2>
 <div class="wrap"><table>
   <tr><th>ID</th><th>Kind</th><th>Source</th><th class="num">Strength</th><th>Observed</th><th>Genuine</th></tr>
   {% for e in evidence[:60] %}

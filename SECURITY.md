@@ -60,9 +60,26 @@ every manual chapter.
 
 Every data endpoint requires a credential, including the `/_lens/{id}` and
 `/_provenance` metadata routes. Four paths stay open: `/healthz`, which probes and CI
-need before they have anything to authenticate with and which returns only liveness and
-the world's identifying metadata, and FastAPI's own `/docs`, `/redoc` and
-`/openapi.json`, which describe the interface and expose no data.
+need before they have anything to authenticate with, and FastAPI's own `/docs`,
+`/redoc` and `/openapi.json`, which describe the interface and expose no data.
+
+`/healthz` returns liveness, the auth mode and the lens list to anyone, and the
+world's identifying metadata only to a caller that authenticated. That split matters
+because the seed, as-of, scale and chaos reproduce the world byte-identically and the
+generator ships in this repo, so those values are effectively the answer key. With the
+shipped default it changes little, since seed 48392 is printed in the README. It
+matters when you point a kit you did not write at a world generated from a private
+seed: the twin gateway is the only surface that kit is given, and it should not be
+the thing that hands over the marking scheme.
+
+**The Control Center has no authentication at all, by design**, and
+`/export/groundtruth` on it returns the complete answer key: the world metadata plus
+every expectation. That is the point of the surface, and it is contained by the
+loopback bind rather than by a credential. It does mean the isolation above rests on
+one thing: a kit you are benchmarking must not be given network access to
+`VO_CC_PORT`. If it runs on the host or inside the compose network, it can read the
+marking scheme directly and the `/healthz` split buys you nothing. Run it somewhere
+that can reach `:8080` and not `:3000`.
 
 ## What VirtualOrg is not
 

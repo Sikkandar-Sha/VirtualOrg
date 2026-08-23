@@ -7,6 +7,7 @@ Adversarial behaviour belongs in WireMock, in front of this. (DESIGN.md #2)
 """
 import base64
 import hashlib
+import logging
 import re
 import hmac
 import os
@@ -15,6 +16,7 @@ import uuid
 import datetime as dt
 from typing import Optional
 
+import psycopg2
 import yaml
 from fastapi import FastAPI, HTTPException, Header, Query, Request
 from fastapi.responses import JSONResponse, Response
@@ -125,12 +127,78 @@ def iso(v):
     return v.isoformat() if isinstance(v, (dt.datetime, dt.date)) else v
 
 
+
+# Malformed values come back as 400, never 500. The twins' contract is that they are
+# always well behaved and that adversarial behaviour lives in WireMock in front; a bare
+# Internal Server Error from a NUL byte or an out-of-range offset breaks that, and a
+# connector graded on its error handling would be graded against a response this
+# harness promises it never sends. Parameterisation is what makes these raise at all,
+# so no value ever reaches SQL as text.
+@app.exception_handler(psycopg2.DataError)
+async def _bad_data(request, exc):
+    # Logged before answering: DataError also covers divide-by-zero and bad casts,
+    # which would be OUR bug, and a registered handler suppresses uvicorn's traceback.
+    # Without this line a server fault would be reported as the caller's mistake and
+    # leave nothing behind to find it by.
+    logging.getLogger("uvicorn.error").error(
+        "DataError on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse({"detail": "a parameter value is out of range for this field"},
+                        status_code=400)
+
+
+@app.exception_handler(ValueError)
+async def _bad_value(request, exc):
+    # Match psycopg2's actual wording. "NUL" is a substring of "NULL", which a
+    # database application says all the time, so the loose test silently reported
+    # genuine internal errors as client errors.
+    if "cannot contain NUL" in str(exc) or "0x00" in str(exc):
+        return JSONResponse({"detail": "parameter values may not contain NUL bytes"},
+                            status_code=400)
+    raise exc
+
+
+# A filter this twin does not implement must never be silently satisfied. Returning
+# `200 []` with a corroborating total is indistinguishable, to a connector, from "no
+# rows matched" - which is the exact failure `sysparm_query`, the IAM `filter` grammar
+# and `_rule_filter` each already refuse. Same rule, applied to the enum filters.
+def _enum(value, allowed, field):
+    if value is None:
+        return None
+    if value not in allowed:
+        raise HTTPException(400, f"unknown {field}: {value!r}. "
+                                 f"valid values are {', '.join(sorted(allowed))}")
+    return value
+
+
+
 # ----------------------------------------------------------------- meta
 @app.get("/healthz")
-def healthz():
-    meta = {r["key"]: r["value"] for r in db.q("SELECT key, value FROM world_meta")}
-    return {"status": "ok", "world": meta, "auth_mode": AUTH_MODE,
-            "lenses": [r["id"] for r in db.q("SELECT id FROM lens ORDER BY id")]}
+def healthz(authorization: Optional[str] = Header(None)):
+    """Liveness openly; the world's identifying metadata only to a caller that
+    authenticated.
+
+    Seed plus as-of, scale and chaos reproduce this world byte-identically and the
+    generator ships in this repo, so those values ARE the answer key: whoever holds
+    them can rebuild every expectation and every trap offline. Handing them out on the
+    one surface the kit under test is pointed at defeats the isolation the
+    `/export/groundtruth` comment claims.
+
+    With the shipped default this changes little, since that seed is printed in the
+    README. It matters when you point a kit you did not write at a world built from a
+    private seed. Note what this does NOT achieve on its own: the Control Center is
+    unauthenticated by design and serves the whole answer key at /export/groundtruth,
+    so the real boundary is a network one. A kit being benchmarked must be able to
+    reach the twin gateway and not the Control Center; this gate only stops the
+    gateway itself from being the leak. Probes and CI still get status, auth_mode and
+    lenses with no credential."""
+    out = {"status": "ok", "auth_mode": AUTH_MODE,
+           "lenses": [r["id"] for r in db.q("SELECT id FROM lens ORDER BY id")]}
+    try:
+        require_token(authorization)
+    except HTTPException:
+        return out
+    out["world"] = {r["key"]: r["value"] for r in db.q("SELECT key, value FROM world_meta")}
+    return out
 
 
 @app.get("/_lens/{lens_id}")
@@ -178,7 +246,7 @@ SNOW = "/servicenow/api/now/table"
 @app.get(SNOW + "/{table}")
 def snow_table(table: str,
                sysparm_limit: int = Query(100, ge=1, le=1000),
-               sysparm_offset: int = Query(0, ge=0),
+               sysparm_offset: int = Query(0, ge=0, le=10_000_000),
                sysparm_query: Optional[str] = None,  # see the guard below
                x_vo_profile: Optional[str] = Header(None),
                authorization: Optional[str] = Header(None)):
@@ -193,9 +261,10 @@ def snow_table(table: str,
     if not spec:
         raise HTTPException(404, f"no such table: {table}")
     fm = spec["fields"]
-    hz, fl = lenses.horizon("servicenow"), lenses.floor("servicenow")
 
     if table == "incident":
+        # only the incident feed is a time series, so only it needs the window
+        hz, fl = lenses.horizon("servicenow"), lenses.floor("servicenow")
         sev_map = {int(k): v for k, v in spec["severity_values"].items()}
         rows = db.q("""SELECT ref, title, category, severity, opened_at, closed_at,
                               service_id, stated_impact
@@ -387,9 +456,13 @@ def _rule_filter(search: str):
     if re.search(r'(?:^|\s)(?:NOT\s+|!\s*)rule\s*=|(?:^|\s)rule\s*!=', search, re.IGNORECASE):
         raise HTTPException(400, "negated rule filters are not supported by this twin")
 
-    m = re.search(r'(?:^|\s)rule=("?)([A-Za-z0-9_.:-]+)\1(?=\s|$)', search)
-    if m:
-        return m.group(2)
+    found = re.findall(r'(?:^|\s)rule=("?)([A-Za-z0-9_.:-]+)\1(?=\s|$)', search)
+    values = {v for _q, v in found}
+    if len(values) > 1:
+        raise HTTPException(400, f"only one rule= term is supported; got "
+                                 f"{', '.join(sorted(values))}")
+    if found:
+        return found[0][1]
 
     # A filter this twin does not implement must not be silently dropped. Returning
     # every row with a corroborating resultCount is worse than refusing: the caller
@@ -415,7 +488,7 @@ def _count(job):
 
 
 @app.get(SPL + "/{sid}/results")
-def splunk_job_results(sid: str, offset: int = Query(0, ge=0), count: int = Query(100, ge=1, le=5000),
+def splunk_job_results(sid: str, offset: int = Query(0, ge=0, le=10_000_000), count: int = Query(100, ge=1, le=5000),
                        authorization: Optional[str] = Header(None)):
     require_token(authorization)
     _expire_jobs()
@@ -423,6 +496,11 @@ def splunk_job_results(sid: str, offset: int = Query(0, ge=0), count: int = Quer
     if not job:
         raise HTTPException(404, "unknown sid")
     if job["polls"] < 2:
+        # Advance here too. Real Splunk completes server-side, so a connector that
+        # submits and then polls /results without touching /jobs/{sid} is following a
+        # legitimate pattern; before this it span until JOB_TTL_SECONDS expired the
+        # job and it started 404ing, which the "always well behaved" contract forbids.
+        job["polls"] += 1
         # 204 means no content, so it must not carry one. A body here is a protocol
         # violation that some HTTP clients reject outright.
         return Response(status_code=204)
@@ -458,7 +536,7 @@ HR = "/hr/api/v1"
 
 
 @app.get(HR + "/workers")
-def hr_workers(page: int = Query(1, ge=1), per_page: int = Query(100, ge=1, le=1000),
+def hr_workers(page: int = Query(1, ge=1, le=10_000_000), per_page: int = Query(100, ge=1, le=1000),
                active: Optional[bool] = None,
                authorization: Optional[str] = Header(None)):
     require_token(authorization)
@@ -517,7 +595,7 @@ def _edr_rows():
 
 
 @app.get(EDR + "/queries/devices/v1")
-def edr_query(limit: int = Query(100, ge=1, le=5000), offset: int = Query(0, ge=0),
+def edr_query(limit: int = Query(100, ge=1, le=5000), offset: int = Query(0, ge=0, le=10_000_000),
               authorization: Optional[str] = Header(None)):
     """Step 1 of 2, ids only. No device detail is returned here, by design."""
     require_token(authorization)
@@ -578,7 +656,7 @@ async def edr_hydrate(request: Request, authorization: Optional[str] = Header(No
 IAM = "/iam/api/v1"
 
 
-def _severity_role(privileged):
+def _role_for(privileged):
     return ["SUPER_ADMIN"] if privileged else ["USER"]
 
 
@@ -615,7 +693,7 @@ def _iam_user(r, v):
 
 @app.get(IAM + "/users")
 def iam_users(limit: int = Query(200, ge=1, le=1000), after: Optional[str] = None,
-              filter: Optional[str] = None, request: Request = None,
+              filter: Optional[str] = None,
               authorization: Optional[str] = Header(None)):
     require_token(authorization)
     rows = _iam_rows()
@@ -663,12 +741,23 @@ def iam_user_groups(login: str, authorization: Optional[str] = Header(None)):
     """Membership as the directory holds it, including memberships never revoked
     after the person left, which the directory has no opinion about."""
     require_token(authorization)
+    # Joined to lens_visibility like every other IAM route. Without it this endpoint
+    # returned memberships for people /users/{login} answers 404 for, which breaks the
+    # invariant lenses.py states: a lens can only return entities present in
+    # lens_visibility. A connector could enumerate past the lens's own coverage.
     rows = db.q("""SELECT g.id, g.name, g.privileged, m.granted_on, m.revoked_on
                      FROM group_membership m
                      JOIN access_group g ON g.id = m.group_id
                      JOIN account a ON a.id = m.account_id
+                     JOIN lens_visibility v ON v.entity_id = a.person_id
+                          AND v.lens_id = 'iam' AND v.entity_kind = 'person'
                     WHERE a.system = 'okta' AND a.username = %s
                     ORDER BY g.name""", (login,))
+    if not rows and not db.one("""SELECT 1 AS x FROM account a
+                                   JOIN lens_visibility v ON v.entity_id = a.person_id
+                                        AND v.lens_id = 'iam' AND v.entity_kind = 'person'
+                                  WHERE a.system = 'okta' AND a.username = %s""", (login,)):
+        raise HTTPException(404, "user not found")
     return [{"id": r["id"], "profile": {"name": r["name"],
              "description": "privileged" if r["privileged"] else "standard"},
              "granted": iso(r["granted_on"]), "revoked": iso(r["revoked_on"]),
@@ -681,7 +770,7 @@ def iam_user(login: str, authorization: Optional[str] = Header(None)):
     for r, v in _iam_rows():
         if v["external_id"] == login:
             u = _iam_user(r, v)
-            u["roles"] = _severity_role(r["privileged"])
+            u["roles"] = _role_for(r["privileged"])
             return u
     raise HTTPException(404, "user not found")
 
@@ -703,6 +792,7 @@ def scanner_findings(since: Optional[str] = None, since_id: Optional[str] = None
                      state: Optional[str] = None,
                      authorization: Optional[str] = Header(None)):
     require_token(authorization)
+    state = _enum(state and state.upper(), {"OPEN", "FIXED"}, "state")
     hz, fl = lenses.horizon("scanner"), lenses.floor("scanner")
     rows = db.q("""SELECT v.id, v.cve, v.cvss, v.discovered_on, v.remediated_on,
                           lv.external_id AS host, lv.last_seen
@@ -754,6 +844,7 @@ def scanner_misconfigs(since: Optional[str] = None, since_id: Optional[str] = No
                        authorization: Optional[str] = Header(None)):
     """Baseline drift, on the same incremental contract as findings."""
     require_token(authorization)
+    state = _enum(state and state.upper(), {"OPEN", "RESOLVED"}, "state")
     hz, fl = lenses.horizon("scanner"), lenses.floor("scanner")
     rows = db.q("""SELECT m.id, m.baseline_ref, m.title, m.severity, m.detected_on,
                           m.remediated_on, lv.external_id AS host, lv.last_seen
@@ -793,7 +884,7 @@ def scanner_misconfigs(since: Optional[str] = None, since_id: Optional[str] = No
 
 
 @app.get(SCAN + "/assets")
-def scanner_assets(limit: int = Query(500, ge=1, le=5000), offset: int = Query(0, ge=0),
+def scanner_assets(limit: int = Query(500, ge=1, le=5000), offset: int = Query(0, ge=0, le=10_000_000),
                    authorization: Optional[str] = Header(None)):
     require_token(authorization)
     vis = lenses.visible_ids("scanner", "asset")
@@ -822,9 +913,14 @@ def _decode(c: Optional[str]) -> int:
         return 0
     pad = "=" * (-len(c) % 4)
     try:
-        return int(base64.urlsafe_b64decode(c + pad).decode())
+        start = int(base64.urlsafe_b64decode(c + pad).decode())
     except Exception:
         raise HTTPException(400, "malformed cursor")
+    # A negative offset returned an empty page WITH a valid forward cursor, so a
+    # connector that stops on the first empty page walked away from a full result set.
+    if start < 0:
+        raise HTTPException(400, "malformed cursor")
+    return start
 
 
 def _page(rows, cursor, limit, key="items"):
@@ -860,6 +956,7 @@ def grc_controls(cursor: Optional[str] = None, limit: int = Query(50, ge=1, le=5
 def grc_findings(status: Optional[str] = None, cursor: Optional[str] = None,
                  limit: int = Query(50, ge=1, le=500), authorization: Optional[str] = Header(None)):
     require_token(authorization)
+    status = _enum(status, {"open", "overdue", "closed"}, "status")
     sql = """SELECT f.id, f.title, f.severity, f.raised_on, f.due_on, f.closed_on,
                     f.status, c.ref AS control_ref
                FROM finding f JOIN control c ON c.id = f.control_id"""
@@ -942,6 +1039,7 @@ def grc_exceptions(status: Optional[str] = None, cursor: Optional[str] = None,
     """`status` is what the platform asserts, not what the calendar says. An exception
     can read `active` with an expiry date months in the past."""
     require_token(authorization)
+    status = _enum(status, {"active", "expired", "withdrawn"}, "status")
     sql = """SELECT e.id, e.reason, e.approved_on, e.expires_on, e.status,
                     c.ref AS control_ref, p.full_name AS approved_by
                FROM control_exception e
@@ -965,6 +1063,7 @@ def grc_treatments(status: Optional[str] = None, cursor: Optional[str] = None,
                    limit: int = Query(50, ge=1, le=500),
                    authorization: Optional[str] = Header(None)):
     require_token(authorization)
+    status = _enum(status, {"planned", "in_progress", "complete", "overdue"}, "status")
     sql = """SELECT t.id, t.strategy, t.description, t.target_date, t.completed_on,
                     t.status, r.ref AS risk_ref, p.full_name AS owner
                FROM risk_treatment t
@@ -1098,10 +1197,10 @@ def _attachment_sha256(row) -> str:
 @app.get(GRC + "/findings/{finding_id}/attachments")
 def grc_attachments(finding_id: str, authorization: Optional[str] = Header(None)):
     require_token(authorization)
-    rows = db.q("""SELECT id, filename, media_type, size_bytes, uploaded_on, content_seed
-                     FROM attachment WHERE finding_id = %s ORDER BY id""", (finding_id,))
     if not db.one("SELECT 1 AS x FROM finding WHERE id = %s", (finding_id,)):
         raise HTTPException(404, "no such finding")
+    rows = db.q("""SELECT id, filename, media_type, size_bytes, uploaded_on, content_seed
+                     FROM attachment WHERE finding_id = %s ORDER BY id""", (finding_id,))
     return {"attachments": [{
         "id": r["id"], "filename": r["filename"], "media_type": r["media_type"],
         "size_bytes": r["size_bytes"], "uploaded_on": iso(r["uploaded_on"]),

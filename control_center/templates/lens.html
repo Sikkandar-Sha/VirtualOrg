@@ -11,8 +11,11 @@
   <div><div class="k">World now</div><div class="v">{{ now.strftime('%Y-%m-%d %H:%M') }}</div></div>
   <div><div class="k">Newest it can see</div><div class="v">{{ horizon.strftime('%Y-%m-%d %H:%M') }}
     <small>−{{ l.latency_minutes }}m</small></div></div>
-  <div><div class="k">Oldest it retains</div><div class="v">{{ floor.strftime('%Y-%m-%d') }}
-    <small>{% if capped %}world starts here{% else %}−{{ l.retention_days }}d{% endif %}</small></div></div>
+  <div><div class="k">{% if window and window.window_enforced %}Oldest it retains{% else %}Sync staleness{% endif %}</div>
+    <div class="v">{% if window and window.window_enforced %}{{ floor.strftime('%Y-%m-%d') }}
+      <small>{% if capped %}world starts here{% else %}−{{ l.retention_days }}d{% endif %}</small>
+    {% else %}up to {{ l.retention_days }}d
+      <small>current state, no feed to truncate</small>{% endif %}</div></div>
   <div><div class="k">Entities</div><div class="v">{{ counts | sum(attribute='n') }}</div></div>
 </div>
 

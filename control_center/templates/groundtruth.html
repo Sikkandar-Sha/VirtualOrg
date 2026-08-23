@@ -27,7 +27,7 @@
 </table></div>
 
 <p class="note" style="margin-top:14px">Attribution scoring corpus:
-  <b>{{ "{:,}".format(corpus.true_links) }}</b> true evidence links, <b>{{ "{:,}".format(corpus.traps) }}</b> deliberate
+  <b>{{ "{:,}".format(corpus.reachable_links) }} retrievable of {{ "{:,}".format(corpus.true_links) }}</b> true evidence links, <b>{{ "{:,}".format(corpus.reachable_traps) }} retrievable of {{ "{:,}".format(corpus.traps) }}</b> deliberate
   traps, across {{ corpus.controls_with_evidence }} controls.</p>
 
 <div class="tabs">
@@ -55,7 +55,7 @@
   {% endfor %}
 </table></div>
 <div class="pager">
-  {% if offset %}<a href="/groundtruth?family={{ family }}&offset={{ offset - 200 }}">← previous</a>{% endif %}
+  {% if offset %}<a href="/groundtruth?family={{ family }}&offset={{ [offset - page_size, 0] | max }}">← previous</a>{% endif %}
   {% if offset + 200 < total %}<a href="/groundtruth?family={{ family }}&offset={{ offset + 200 }}">next →</a>{% endif %}
 </div>
 {% endblock %}

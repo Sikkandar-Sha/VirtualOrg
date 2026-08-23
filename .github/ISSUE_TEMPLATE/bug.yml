@@ -12,8 +12,8 @@ body:
     id: world
     attributes:
       label: World
-      description: The output of `curl -s localhost:8080/healthz`, or just the seed, as-of and generator_version.
-      placeholder: seed=48392 as_of=2026-08-21 scale=1.0 chaos=1 generator_version=5
+      description: 'The output of `curl -s -H "Authorization: Bearer $VO_TOKEN" localhost:8080/healthz`, or just the seed, as-of and generator_version.'
+      placeholder: seed=48392 as_of=2026-08-21 scale=1.0 chaos=1 generator_version=6
     validations:
       required: true
   - type: textarea

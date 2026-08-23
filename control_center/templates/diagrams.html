@@ -211,6 +211,13 @@
 
 
 {% macro correlation(a, lenses) %}
+  {# the hatch pattern is defined here too: referencing a pattern declared in another
+     macro left this band unfilled on any page that renders correlation() alone #}
+  <defs>
+    <pattern id="hatch" width="5" height="5" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="5" stroke="var(--rule-2)" stroke-width="1"/>
+    </pattern>
+  </defs>
 {# A register, read top to bottom: the machine, then one row per lens that tracks
    assets. Rows grow downwards, so this holds at any number of lenses and at any
    identifier length, neither of which the old fixed-pitch row of boxes did. #}

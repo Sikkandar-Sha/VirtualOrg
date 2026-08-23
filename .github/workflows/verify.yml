@@ -95,23 +95,63 @@ jobs:
           print("counts agree")
           EOF
 
+      - name: Documented numbers match the running system
+        run: |
+          # These have drifted twice. A number in the README that nothing checks is a
+          # claim, not a fact, so check it.
+          actual=$(python3 scripts/verify.py 2>&1 | grep -cE '^  (PASS|FAIL)')
+          for f in README.md docs/index.html CHANGELOG.md; do
+            claimed=$(grep -oE '[0-9]{2,3} self-checks' "$f" | head -1 | grep -oE '[0-9]+' || true)
+            if [ -n "$claimed" ] && [ "$claimed" != "$actual" ]; then
+              echo "$f says $claimed self-checks; the suite runs $actual"; exit 1
+            fi
+          done
+          echo "self-check count agrees in every document: $actual"
+
+          gv=$(curl -s -H "Authorization: Bearer vo-dev-token" localhost:8080/healthz \
+               | python3 -c 'import sys,json;print(json.load(sys.stdin)["world"]["generator_version"])')
+          doc=$(grep -oE '"generator_version": "[0-9]+"' scripts/score | head -1 | grep -oE '[0-9]+')
+          [ "$gv" = "$doc" ] || { echo "scripts/score documents generator_version $doc; world is $gv"; exit 1; }
+          echo "scorer's worked example matches the world: generator_version $gv"
+
+      - name: No authoring-tool attribution anywhere
+        run: |
+          # Same rule as the long dash, and for the same reason: this is the author's
+          # project and nothing in it should credit or name the tooling used to write
+          # it. Covers tracked file content, commit messages and commit trailers.
+          # Patterns are assembled at runtime so this file does not trip its own check.
+          A=$(printf 'cl''aude'); B=$(printf 'anthro''pic'); C=$(printf 'co-auth''ored-by')
+          D=$(printf 'open''ai'); E=$(printf 'chat''gpt'); F=$(printf 'co''pilot')
+          PAT="$A|$B|$C|$D|$E|$F"
+          hits=$(git ls-files | xargs grep -IlEi "$PAT" 2>/dev/null || true)
+          if [ -n "$hits" ]; then
+            echo "authoring-tool reference found in:"; echo "$hits"
+            git ls-files | xargs grep -InEi "$PAT" 2>/dev/null | head -20
+            exit 1
+          fi
+          if git log --format='%B' | grep -qEi "$PAT"; then
+            echo "authoring-tool reference found in a commit message:"
+            git log --format='%h %B' | grep -nEi "$PAT" | head -10
+            exit 1
+          fi
+          echo "clean: no authoring-tool attribution in files or commit messages"
+
       - name: No em dashes in anything we author
         run: |
           # A hard rule, not a preference: the long dash reads as machine-written.
           # The character is built at runtime with printf so that this file does not
           # contain the very thing it bans and flag itself.
           DASH=$(printf '\u2014')
-          hits=$(git ls-files | grep -v '^DESIGN.md$' | xargs grep -l "$DASH" 2>/dev/null || true)
+          hits=$(git ls-files | grep -v '^DESIGN.md$' | xargs grep -Il "$DASH" 2>/dev/null || true)
           if [ -n "$hits" ]; then
             echo "long dash found in:"; echo "$hits"
-            git ls-files | grep -v '^DESIGN.md$' | xargs grep -n "$DASH" 2>/dev/null | head -20
+            git ls-files | grep -v '^DESIGN.md$' | xargs grep -In "$DASH" 2>/dev/null | head -20
             exit 1
           fi
           echo "clean: DESIGN.md keeps its own voice, everything else is free of it"
 
       - name: The reference kit runs and can be scored
         run: |
-          pip install --quiet httpx
           python3 examples/reference-kit/kit.py > /tmp/posture.json
           python3 -c "import json;d=json.load(open('/tmp/posture.json'));print(f'{len(d[\"findings\"])} findings, {len(d[\"attributions\"])} attributions')"
           VO_CC_BASE=http://localhost:3000 ./scripts/score /tmp/posture.json
@@ -169,8 +209,23 @@ jobs:
               ) t"
           }
           a=$(fingerprint)
+          # Prove the generator actually ran and finished before fingerprinting again.
+          # `sleep 10` was a race, and generate.py does TRUNCATE+INSERT in one
+          # transaction, so a fingerprint taken mid-run returns the PRE-EXISTING rows:
+          # identical by construction, and a silent false green on the one property
+          # this project leads with.
           docker compose up -d --force-recreate world-engine
-          sleep 10
+          for i in $(seq 1 60); do
+            st=$(docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' \
+                 "$(docker compose ps -aq world-engine)" 2>/dev/null || echo "unknown:")
+            case "$st" in
+              exited:0) break;;
+              exited:*) echo "world-engine failed: $st"; docker compose logs world-engine | tail -40; exit 1;;
+            esac
+            sleep 2
+          done
+          [ "${st%%:*}" = "exited" ] || { echo "world-engine did not finish in 120s"; exit 1; }
+          echo "world-engine regenerated and exited cleanly"
           b=$(fingerprint)
           echo "before=$a"
           echo "after =$b"

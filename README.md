@@ -4,7 +4,7 @@
 included.**
 
 [![licence](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
-[![checks](https://img.shields.io/badge/self--checks-97%20passing-brightgreen)](scripts/verify.py)
+[![checks](https://img.shields.io/badge/self--checks-103%20passing-brightgreen)](scripts/verify.py)
 [![boot](https://img.shields.io/badge/cold%20boot-~10s-brightgreen)](#run-it)
 [![lenses](https://img.shields.io/badge/vendor%20lenses-7-informational)](#the-seven-lenses)
 
@@ -59,7 +59,7 @@ correlation, conflict and coverage-gap problems your product exists to solve.**
 
 ## What you get
 
-**1,263 ground-truth assertions.** `world.expectation` says what your product should
+**1,260 ground-truth assertions.** `world.expectation` says what your product should
 conclude, and what it should refuse to conclude. Four families: attribution, conflict,
 degradation, absence.
 
@@ -68,7 +68,7 @@ degradation, absence.
 **An answer key for attribution.** Nothing in any vendor API links a SIEM detection to a
 GRC control. That inference is your product's core job, and the thing most likely to be
 wrong in a way nobody notices. `world.evidence.control_id` holds the true link for
-**4,983** events, and `is_trap` marks **747** decoys drawn from the whole control
+**5,002** events, and `is_trap` marks **734** decoys drawn from the whole control
 library. Where `is_trap` is false, `control_id` is the true attribution; on a decoy it
 is the control the event was planted against. Score precision
 and recall against it.
@@ -89,9 +89,9 @@ real OAuth, and an adversarial proxy that returns 429s and expired tokens on dem
 | **Writing connectors** | Seven live API patterns: async job, cursor, offset, Link header, page number, incremental `since` and query-then-hydrate, plus binary evidence retrieval behind a second credential |
 | **Testing entity resolution** | One machine under five identifiers, recycled IPs so the IP is not a key, and one join that *does* work so you can tell the difference |
 | **Guarding against regressions** | A deterministic world and a restorable baseline, so any posture delta is a real finding |
-| **Scoring inference quality** | 4,983 true evidence links and 747 deliberate decoys |
+| **Scoring inference quality** | 5,002 true evidence links and 734 deliberate decoys |
 | **Proving deployability** | Three customer schema profiles on the ServiceNow lens. Passing all three means the connector ships. Passing only `out-of-the-box` means it demos |
-| **Demoing** | *"Here are the 55 machines with no endpoint agent, and the 7 control exceptions that expired months ago. A GRC platform will never tell you that."* |
+| **Demoing** | *"Here are the 55 machines with no endpoint agent, and the 10 control exceptions that expired months ago. A GRC platform will never tell you that."* |
 
 ## Run it
 
@@ -256,34 +256,31 @@ python3 examples/reference-kit/kit.py > posture.json
 
 ```
 Findings
-  Counted by distinct (family, subject_kind, subject_id), which is what a kit
-  can express. The ground-truth catalogue counts expectation rows, and one
-  subject can carry several, so its totals are higher. Attribution is scored
-  separately, below.
   family        expected  claimed  correct  missed  spurious  precision   recall
-  absence            280        3        3     277         0      1.000    0.011
-  conflict            94       52       52      42         0      1.000    0.553
-  degradation         32        0        0      32         0      0.000    0.000
-  all                406       55       55     351         0      1.000    0.135
+  absence            283        4        4     279         0      1.000    0.014
+  conflict           102       56       56      46         0      1.000    0.549
+  degradation         34        0        0      34         0      0.000    0.000
+  all                419       60       60     359         0      1.000    0.143
+  2 of those subjects are not reachable through any lens
 
 Attribution
-  455 attributions claimed, 455 distinct links scored
-  correct 57   wrong 398   missed 1,128
-  precision 0.125   recall 0.048
-  traps taken 86 of 246
+  460 attributions claimed, 460 distinct links scored
+  correct 69   wrong 391   missed 1,102
+  precision 0.150   recall 0.059
+  traps taken 86 of 247
 ```
 
 Two totals appear here and they measure different things. The catalogue above counts
-**expectation rows**, 1,263 of them; the scorer counts **distinct subjects**, because a
+**expectation rows**, 1,260 of them; the scorer counts **distinct subjects**, because a
 kit emits one finding per subject and one subject can carry several rows. That is why
-absence reads 366 in the catalogue and 280 here.
+absence reads 368 in the catalogue and 283 here.
 
-Recall is measured against the 1,185 true links whose source record a connector can
-actually retrieve, and traps against the 246 it can actually encounter. The world holds
-4,983 links and 747 decoys in total; the rest sit behind control-test history no lens
+Recall is measured against the 1,171 true links whose source record a connector can
+actually retrieve, and traps against the 247 it can actually encounter. The world holds
+5,002 links and 734 decoys in total; the rest sit behind control-test history no lens
 exposes, or on alerts outside Splunk's 90-day retention or on assets its 83% coverage
-never sees. Scoring a kit against evidence it was never shown would measure the wrong
-thing, and counting traps it could never meet would flatter it.
+never sees. Two finding subjects are unreachable through any lens as well, so a
+flawless kit cannot claim them and the scorer says so.
 
 The input contract is deliberately small, and findings match on the
 `(family, subject_kind, subject_id)` triple rather than on claim text, so this measures
@@ -292,7 +289,7 @@ whether the right thing was found rather than how it was phrased:
 ```json
 {
   "meta": { "world_seed": 48392, "as_of": "2026-08-21", "scale": 1.0,
-             "chaos": 1, "generator_version": "5" },
+             "chaos": 1, "generator_version": "6" },
   "findings":     [{ "family": "conflict", "subject_kind": "control", "subject_id": "C-017" }],
   "attributions": [{ "evidence_id": "ALR-009852", "control_id": "C-011" }]
 }
@@ -306,7 +303,7 @@ different world.
 
 **`examples/reference-kit/`** is a small, readable consumer that produces one. It is
 deliberately naive: it attributes alerts to controls by matching words in the rule name
-against words in the control title, which is exactly the inference the 747 decoys exist
+against words in the control title, which is exactly the inference the 734 decoys exist
 to punish. Its score above is what that approach is worth.
 
 ## Ground truth
@@ -319,24 +316,24 @@ SELECT family, claim, count(*) FROM world.expectation GROUP BY 1,2 ORDER BY 1;
 ```
 
 ```
-absence     asset runs software that is past its end-of-life date                       250
-absence     asset is live but carries no endpoint protection agent                       55
-absence     asset is scanned for vulnerabilities but monitored by no SIEM                39
+absence     asset runs software that is past its end-of-life date                       253
+absence     asset is live but carries no endpoint protection agent                       56
+absence     asset is scanned for vulnerabilities but monitored by no SIEM                33
 absence     control has no evidence source of any kind                                    8
 absence     leaver is a contractor, so no HR record confirms the termination              7
+absence     asset is live and in ITSM but invisible to every security lens                4
+absence     policy is approved but no control implements it                               4
 absence     application is not attached to any business service                           3
-absence     policy is approved but no control implements it                               3
-absence     asset is live and in ITSM but invisible to every security lens                1
-attribution evidence is linked to a control it does not evidence                        747
-conflict    person has left but an account remains enabled                               31
-conflict    control owner of record has left the company                                 18
-conflict    person has left but retains membership of a privileged group                 18
-conflict    risk treatment is overdue while the risk remains above appetite              14
+attribution evidence is linked to a control it does not evidence                        734
+conflict    person has left but an account remains enabled                               44
+conflict    risk treatment is overdue while the risk remains above appetite              18
+conflict    control owner of record has left the company                                 14
+conflict    person has left but retains membership of a privileged group                 14
 conflict    incident recorded as no customer impact on a tier-1 service                  13
 conflict    control tested effective while an overdue audit finding stands against it    12
-conflict    control exception is recorded as active but its expiry date has passed       10
+conflict    control exception is recorded as active but its expiry date has passed        7
 conflict    risk presented as current but review period has lapsed                        2
-degradation endpoint agent is installed but has not reported in over a week              32
+degradation endpoint agent is installed but has not reported in over a week              34
 ```
 
 Counts are for `--seed 48392 --as-of 2026-08-21 --scale 1.0`. Same seed, same numbers.
@@ -555,7 +552,7 @@ git checkout dev && git push                 # day to day
 git checkout main && git merge --ff-only dev && git push   # when it is ready
 ```
 
-CI runs on both: it boots the whole environment, runs the 97 self-checks, loads every
+CI runs on both: it boots the whole environment, runs the 103 self-checks, loads every
 Control Center surface, exercises the chaos proxy and real OAuth, and regenerates the
 world twice to prove determinism.
 

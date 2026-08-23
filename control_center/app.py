@@ -13,12 +13,15 @@ it describes.
 """
 import datetime as dt
 import glob
+import logging
 import os
 import textwrap
+
+import psycopg2
 from typing import Optional
 
 from fastapi import HTTPException, FastAPI, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -84,6 +87,24 @@ def _retention_floor(now, retention_days):
         if window < start_ts:
             return start_ts, True
     return window, False
+
+
+
+# Same contract as the twins: a malformed value is a 400, never a 500.
+@app.exception_handler(psycopg2.DataError)
+async def _bad_data(request, exc):
+    logging.getLogger("uvicorn.error").error(
+        "DataError on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse({"detail": "a parameter value is out of range"}, status_code=400)
+
+
+@app.exception_handler(ValueError)
+async def _bad_value(request, exc):
+    # "NUL" is a substring of "NULL"; match psycopg2's actual wording.
+    if "cannot contain NUL" in str(exc) or "0x00" in str(exc):
+        return JSONResponse({"detail": "parameter values may not contain NUL bytes"},
+                            status_code=400)
+    raise exc
 
 
 def page(request, template, **ctx):
@@ -216,29 +237,34 @@ def lens_detail(request: Request, lens_id: str, call: Optional[str] = None,
     result = None
     calls = TRY_IT.get(lens_id, [])
     if call is not None:
+        # A wrong or stale ?call= must not look like it worked, for the same reason
+        # manual() refuses an unknown chapter.
         try:
             method, path, params = calls[int(call)]
         except (ValueError, IndexError):
-            method, path, params = calls[0]
+            raise HTTPException(404, f"no such call for {lens_id}: {call!r}. "
+                                     f"valid values are 0..{len(calls) - 1}")
         result = probes.twin_call(method, path,
                                   params=params if method == "GET" else None,
                                   data=params if method == "POST" else None,
                                   profile=profile if lens_id == "servicenow" else None)
+    # A 3650-day window on a three-year world implied seven years of data that cannot
+    # exist, so the floor is clamped to the world's start. Computed once: each call
+    # does its own read of world_meta.
+    _floor, _capped = _retention_floor(now, l["retention_days"])
     return page(request, "lens.html", l=l, calls=calls, result=result,
                 prov=probes.provenance().get("lenses", {}).get(lens_id),
+                window=probes.lens_note(lens_id),
                 selected=call, profile=profile or PROFILES[0], profiles=PROFILES,
                 horizon=now - dt.timedelta(minutes=l["latency_minutes"]),
-                # A 3650-day window on a three-year world implied seven years of data
-                # that cannot exist. Show where the data actually starts.
-                floor=_retention_floor(now, l["retention_days"])[0],
-                capped=_retention_floor(now, l["retention_days"])[1], now=now,
+                floor=_floor, capped=_capped, now=now,
                 counts=[c for c in Q.lens_entity_counts() if c["lens_id"] == lens_id])
 
 
 # ------------------------------------------------------------ surface 4: the org
 @app.get("/org")
 def org(request: Request, tab: str = "overview", q: Optional[str] = None,
-        kind: Optional[str] = None, leavers: int = Query(0, ge=0), offset: int = Query(0, ge=0)):
+        kind: Optional[str] = None, leavers: int = Query(0, ge=0, le=10_000_000), offset: int = Query(0, ge=0, le=10_000_000)):
     ctx = {"tab": tab, "q": q or "", "kind": kind or "", "leavers": leavers, "offset": offset}
     if tab == "people":
         ctx["rows"] = Q.people(limit=80, offset=offset, q=q, leavers_only=bool(leavers))
@@ -266,7 +292,7 @@ def person_detail(request: Request, person_id: str):
 
 # --------------------------------------------------------- surface 5: ground truth
 @app.get("/groundtruth")
-def groundtruth(request: Request, family: Optional[str] = None, offset: int = Query(0, ge=0)):
+def groundtruth(request: Request, family: Optional[str] = None, offset: int = Query(0, ge=0, le=10_000_000)):
     return page(request, "groundtruth.html", families=Q.expectation_families(),
                 subject_counts=Q.expectation_subject_counts(),
                 rows=Q.expectations(family=family, offset=offset),

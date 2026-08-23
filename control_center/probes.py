@@ -106,6 +106,15 @@ def twin_call(method, path, params=None, data=None, profile=None):
         return {"status": 0, "body": f"{type(e).__name__}: {e}", "url": url, "headers": {}}
 
 
+def lens_note(lens_id):
+    """The twin's own coverage note, including whether it enforces its window.
+    Read from the API rather than restated here, so the page cannot drift from it."""
+    try:
+        return httpx.get(f"{TWIN}/_lens/{lens_id}", headers=AUTH, timeout=6).json()
+    except Exception:
+        return None
+
+
 def provenance():
     """#5's standing hazard, surfaced. A hazard nobody can see is not mitigated."""
     try:

@@ -17,28 +17,23 @@ import os, re, sys, datetime as dt
 import httpx, yaml
 
 
-def _dotenv(name, default=""):
-    """The README tells you to set ports in .env; only docker compose reads it by
-    default. An exported variable still wins. Without this, `python3 scripts/verify.py`
-    as the README prints it fails on a machine whose Control Center is not on :3000."""
-    if os.environ.get(name):
-        return os.environ[name]
-    try:
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")) as fh:
-            for line in fh:
-                line = line.strip()
-                if line.startswith(name + "="):
-                    return line.split("=", 1)[1].split("#")[0].strip() or default
-    except OSError:
-        pass
-    return default
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _dotenv import dotenv as _dotenv          # noqa: E402  one parser, see _dotenv.py
+
 
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 BASE = os.environ.get("VO_BASE", "http://127.0.0.1:8080")
-TOK = {"Authorization": "Bearer " + os.environ.get("VO_TOKEN", "vo-dev-token")}
+# VO_TOKENS is what .env.example, docker-compose.yml and the twin actually use;
+# VO_TOKEN was only ever a convenience here. Read both, preferring the documented one,
+# so that editing the single credential in .env has the effect the README implies.
+def _token():
+    return _dotenv("VO_TOKEN") or _dotenv("VO_TOKENS", "vo-dev-token").split(",")[0]
+
+
+TOK = {"Authorization": "Bearer " + _token()}
 c = httpx.Client(base_url=BASE, headers=TOK, timeout=60)
 
 # /healthz needs no credential, so ask it which mode is running and get a real token
@@ -46,8 +41,12 @@ c = httpx.Client(base_url=BASE, headers=TOK, timeout=60)
 # harness looks broken when it is merely locked.
 try:
     _mode = httpx.get(BASE + "/healthz", timeout=10).json().get("auth_mode", "static")
-except Exception:
-    _mode = "static"
+except httpx.HTTPError as _e:
+    # Narrow, and named. A bare `except Exception: "static"` reported a dead gateway
+    # as an auth mode and let every later check fail as if the harness were broken.
+    print(f"cannot reach the twin gateway at {BASE}: {_e}", file=sys.stderr)
+    print("start it with `docker compose up -d`, or set VO_BASE.", file=sys.stderr)
+    sys.exit(2)
 if _mode == "jwks":
     _kc = os.environ.get("VO_KEYCLOAK_BASE", "http://127.0.0.1:8081")
     _t = httpx.post(f"{_kc}/realms/virtualorg/protocol/openid-connect/token",
@@ -118,6 +117,13 @@ def splunk(search):
 
 print("VirtualOrg verification\n")
 h = c.get("/healthz").json()
+if "world" not in h:
+    # /healthz returns 200 without the world block when the credential is wrong, so a
+    # bad token used to surface as KeyError: 'world' twenty lines later.
+    print(f"the twin gateway at {BASE} did not accept this token.", file=sys.stderr)
+    print("set VO_TOKENS in .env (or export VO_TOKEN) to a value the gateway knows.",
+          file=sys.stderr)
+    sys.exit(2)
 print(f"  world seed={h['world']['seed']} as_of={h['world']['as_of']} "
       f"history_start={h['world']['history_start']} chaos={h['world'].get('chaos')}\n")
 
@@ -127,6 +133,12 @@ PROFILES = list(SNOW_PROFILES)
 # Running them against a chaos 0 world would report failures for a world that is
 # behaving exactly as designed.
 CHAOS = int(h["world"].get("chaos", 1))
+# counts in this file are proportions of the generator's base sizes, not
+# literals: at --scale 3.0 the base 500 people becomes 1500.
+_scale = float(h["world"].get("scale", 1.0) or 1.0)
+# the IAM lens caps limit at 1000; past that these one-shot reads must page,
+# and comparing two capped lists would silently compare 1000 with 1000.
+_iam_limit = 1000
 LOSSY = CHAOS > 0
 
 
@@ -152,7 +164,7 @@ for prof in PROFILES:
           all("." in i for i in list(ids)[:20]), f"{len(ids)} assets")
 
 snow_ids = snow_by_profile["out-of-the-box"]
-check("all three profiles describe the same assets under different field names",
+check("all three profiles for the CI and field-mapping checks; the spine and relationship checks run against out-of-the-box only describe the same assets under different field names",
       len(set(map(frozenset, snow_by_profile.values()))) == 1,
       f"{len(PROFILES)} profiles, identical id sets")
 lossy("ServiceNow and Splunk share no asset identifier",
@@ -283,7 +295,7 @@ check("IAM paginates with a Link header, not a body field",
       r.headers.get("link", "")[:70] + "…")
 users, nxt = r.json(), r.headers["link"]
 walked, guard = len(users), 0
-while 'rel="next"' in nxt and guard < 400:
+while 'rel="next"' in nxt and guard < int(400 * max(1.0, _scale)):
     guard += 1
     url = [p.split(">")[0].strip().lstrip("<") for p in nxt.split(",") if 'rel="next"' in p][0]
     rr = c.get(url)
@@ -294,7 +306,7 @@ check("following rel=next walks the whole user set",
       walked == int(r.headers["X-Total-Count"]),
       f"{walked} users across {guard + 1} pages")
 
-allu = c.get("/iam/api/v1/users", params={"limit": 1000}).json()
+allu = c.get("/iam/api/v1/users", params={"limit": _iam_limit}).json()
 deprov = [u for u in allu if u["profile"].get("terminationDate")]
 check("only deprovisioned users carry a termination date",
       all(u["status"] == "DEPROVISIONED" for u in deprov),
@@ -302,15 +314,16 @@ check("only deprovisioned users carry a termination date",
 check("the IdP alone cannot identify orphaned access",
       not [u for u in allu if u["status"] == "ACTIVE" and u["profile"].get("terminationDate")],
       "it takes an HR join, see Cross-source correlation below")
-active = c.get("/iam/api/v1/users", params={"limit": 1000, "filter": 'status eq "ACTIVE"'}).json()
+active = c.get("/iam/api/v1/users", params={"limit": _iam_limit, "filter": 'status eq "ACTIVE"'}).json()
 check("IAM honours the status filter",
       all(u["status"] == "ACTIVE" for u in active) and len(active) < len(allu),
       f"{len(active)} active of {len(allu)}")
 ownf = fld("out-of-the-box", "cmdb_ci_computer", "owner")
 snow_owner_names = {r[ownf] for r in snow("cmdb_ci_computer") if r.get(ownf)}
-assert snow_owner_names, "owner names came back empty, the check below would be vacuous"
+check("ServiceNow returns owner names, so the check below is not vacuous",
+      bool(snow_owner_names), f"{len(snow_owner_names)} owner names")
 iam_logins = {u["profile"]["login"] for u in c.get(
-    "/iam/api/v1/users", params={"limit": 1000}).json()}
+    "/iam/api/v1/users", params={"limit": _iam_limit}).json()}
 lossy("the IdP names people by login, not by the name other lenses show",
       not (snow_owner_names & iam_logins),
       f"{len(snow_owner_names)} owner names vs {len(iam_logins)} logins, zero overlap")
@@ -355,8 +368,9 @@ check("a paged walk of the scanner feed loses nothing",
 backdated = [f for f in second["findings"]
              if f["first_found"] < min(x["first_found"] for x in first["findings"])]
 check("late-arriving records carry an older first_found than the checkpoint",
-      True, f"{len(backdated)} backdated findings in page 2, connectors must not "
-            f"assume first_found is monotonic")
+      len(backdated) > 0,
+      f"{len(backdated)} backdated findings in page 2, connectors must not "
+      f"assume first_found is monotonic")
 openf = c.get("/scanner/api/v3/findings", params={"limit": 200, "state": "OPEN"}).json()
 check("scanner honours the state filter",
       all(f["state"] == "OPEN" for f in openf["findings"]), f"{len(openf['findings'])} open")
@@ -378,7 +392,7 @@ workers, hr_total = hr_pages()
 check("HR paginates by page number and reports total_pages",
       len(workers) == hr_total, f"{len(workers)} workers across the declared pages")
 lossy("HR is structurally blind to contractors",
-      all(w["worker_type"] == "Employee" for w in workers) and hr_total < 500,
+      all(w["worker_type"] == "Employee" for w in workers) and hr_total <= int(500 * _scale),
       f"{hr_total} of 500 people, the rest are engaged through vendor management")
 leavers = [w for w in workers if w["termination_date"]]
 check("HR is the system of record for terminations",
@@ -416,7 +430,7 @@ lossy("EDR names devices by agent id, and carries the short hostname too",
 # ---- 4c-iii. orphaned access now needs a cross-source join
 print("\nCross-source correlation")
 hr_by_email = {w["primary_work_email"]: w for w in workers}
-r_idp = c.get("/iam/api/v1/users", params={"limit": 1000})
+r_idp = c.get("/iam/api/v1/users", params={"limit": _iam_limit})
 r_idp.raise_for_status()      # a 4xx body is a dict; iterating it silently yields keys
 idp = r_idp.json()
 active_idp = [u for u in idp if u["status"] == "ACTIVE"]
@@ -439,7 +453,7 @@ lossy("HR and the IdP share no identifier for the same person",
 print("\nGovernance depth")
 pol = pages("/grc/api/v1/policies")
 check("policies are published with their implementing control count",
-      pol and any(p["implementing_controls"] == 0 for p in pol),
+      pol and all("implementing_controls" in p for p in pol) and any(p["implementing_controls"] > 0 for p in pol),
       f"{len(pol)} policies, {sum(1 for p in pol if not p['implementing_controls'])} implemented by nothing")
 exc = pages("/grc/api/v1/exceptions", status="active")
 lapsed = [e for e in exc if dt.date.fromisoformat(e["expires_on"]) < as_of]
@@ -449,8 +463,9 @@ check("exceptions read 'active' after their expiry date has passed",
 trt = pages("/grc/api/v1/treatments")
 overdue_t = [t for t in trt if t["status"] == "overdue"]
 check("risk treatments carry a strategy, an owner and a target date",
-      trt and {t["strategy"] for t in trt} >= {"mitigate", "accept"} and overdue_t,
-      f"{len(trt)} treatments, {len(overdue_t)} overdue")
+      trt and {t["strategy"] for t in trt} >= {"mitigate", "accept"} and overdue_t
+      and all(t.get("owner") for t in trt) and all(t.get("target_date") for t in trt),
+      f"{len(trt)} treatments, {len(overdue_t)} overdue, all with owner and target date")
 
 print("\nAsset depth")
 sw = snow("cmdb_sam_sw_install")
@@ -492,9 +507,17 @@ for _u in allu:
     if _r:
         someone, gm = _login, _r
         break
-check("group membership is retrievable per user, with revocation dates",
-      bool(gm) and all("revoked" in _m for _m in gm),
-      f"{len(gm)} memberships for {someone}, each carrying a revocation field")
+# A revocation date must actually appear somewhere, not merely be a present key with a
+# null value. Scan a slice of the directory rather than one user, since most
+# memberships are live and a single user may legitimately have none revoked.
+_revoked_seen = 0
+for _u in allu[:120]:
+    for _m in c.get(f"/iam/api/v1/users/{_u['profile']['login']}/groups").json():
+        if _m.get("revoked"):
+            _revoked_seen += 1
+check("group membership is retrievable per user, with real revocation dates",
+      bool(gm) and all("revoked" in _m for _m in gm) and _revoked_seen > 0,
+      f"{len(gm)} memberships for {someone}; {_revoked_seen} revoked dates across 120 users")
 
 # ---- 4d. provenance: is any of this evidence? (DESIGN.md #5)
 print("\nProvenance")
@@ -510,7 +533,7 @@ check("the manifest states plainly that nothing is certified",
       prov["certified"] is False and prov["warning"],
       f"{len(prov['unverified'])} of {len(prov['lenses'])} lenses unverified")
 check("no lens claims verification without a capture date",
-      all(v["status"] == "unverified" or v.get("captured_on")
+      all(v["status"] == "unverified" and not v.get("captured_on")
           for v in prov["lenses"].values()),
       "status is derived, not asserted")
 
@@ -563,13 +586,24 @@ for path in ("/_lens/splunk", "/_provenance", "/_provenance/scanner"):
 check("/healthz stays open so probes can run before credentials",
       httpx.get(BASE + "/healthz", timeout=20).status_code == 200, "by design")
 
+# The seed reproduces the world byte-identically and the generator ships in the repo,
+# so these five values are the answer key. The twin gateway is the only surface the
+# kit under test is given; it must not be the thing that hands the marking scheme over.
+_open_hz = httpx.get(BASE + "/healthz", timeout=20).json()
+check("an unauthenticated /healthz does not disclose the world seed",
+      "world" not in _open_hz,
+      "liveness, auth_mode and lenses only" if "world" not in _open_hz
+      else f"LEAKED: {_open_hz.get('world')}")
+check("an authenticated /healthz still returns the world metadata",
+      "world" in c.get("/healthz").json(), "kits and CI read it from here")
+
 # the download token must not be derivable from the bearer token
 import hashlib as _h
 _f = next((f for f in pages("/grc/api/v1/findings")
            if c.get(f"/grc/api/v1/findings/{f['id']}/attachments").json()["attachments"]), None)
 if _f:
     _a = c.get(f"/grc/api/v1/findings/{_f['id']}/attachments").json()["attachments"][0]
-    _guess = _h.sha256(f"{_a['id']}:{os.environ.get('VO_TOKEN', 'vo-dev-token')}:evidence"
+    _guess = _h.sha256(f"{_a['id']}:{_token()}:evidence"
                        .encode()).hexdigest()[:32]
     check("the attachment download token is not derived from the bearer token",
           _a["download_token"] != _guess, "keyed independently, per VO_EVIDENCE_SECRET")
@@ -636,6 +670,9 @@ for f in fnd:
 check("findings carry attachment metadata", bool(att),
       f"{len(att.get('attachments', []))} on {target}")
 small = next((a for a in att["attachments"] if not a["too_large_to_download"]), None)
+if small is None:
+    check("a downloadable attachment exists to test the content route", False,
+          "every attachment on the sampled finding is over the download limit")
 check("metadata declares size, media type and a checksum",
       small and small["size_bytes"] and small["media_type"] and small["sha256"],
       f"{small['filename']} · {small['media_type']} · {small['size_bytes']:,} bytes")
@@ -644,6 +681,11 @@ check("content needs a second credential, not just the bearer token",
       no_tok.status_code == 403, f"HTTP {no_tok.status_code} without download_token")
 got = c.get(f"/grc/api/v1/attachments/{small['id']}/content",
             params={"token": small["download_token"]})
+# The bytes are already here, so verify the digest rather than merely asserting the
+# field is non-empty: a checksum a connector cannot validate is worse than none.
+check("the advertised SHA-256 is the digest of the bytes returned",
+      _h.sha256(got.content).hexdigest() == small["sha256"],
+      "a connector that verifies the checksum succeeds")
 check("content returns the declared bytes with the declared type",
       got.status_code == 200
       and len(got.content) == small["size_bytes"]
@@ -672,12 +714,19 @@ check("control mappings carry partial coverage, not booleans",
 # ---- 6. loss profile is actually applied
 print("\nLoss profile")
 newest = max(a["_time"] for a in alerts)
+_newest_ts = dt.datetime.fromisoformat(newest)
+_horizon_ts = dt.datetime.fromisoformat(lens["visible_now_until"])
 lossy("Splunk cannot see past its sync latency",
-      newest <= lens["visible_now_until"], f"newest={newest} horizon={lens['visible_now_until']}")
+      _newest_ts <= _horizon_ts, f"newest={newest} horizon={lens['visible_now_until']}")
 oldest = min(a["_time"] for a in alerts)
-cutoff = (dt.datetime.fromisoformat(h["world"]["as_of"]) - dt.timedelta(days=lens["retention_days"]))
+# World-now is the as-of date at 09:00 UTC, not midnight, and the comparison is
+# between aware datetimes rather than strings. The old form dropped tzinfo and then
+# allowed an extra day, together tolerating 33 hours of over-retention silently.
+_world_now = dt.datetime.combine(dt.date.fromisoformat(h["world"]["as_of"]),
+                                 dt.time(9, 0), tzinfo=dt.timezone.utc)
+cutoff = _world_now - dt.timedelta(days=lens["retention_days"])
 lossy("Splunk retains only its retention window",
-      dt.datetime.fromisoformat(oldest).replace(tzinfo=None) >= cutoff - dt.timedelta(days=1),
+      dt.datetime.fromisoformat(oldest) >= cutoff,
       f"oldest={oldest[:10]}, retention={lens['retention_days']}d")
 
 # ---- 7. authored prose, checked against the world it describes
@@ -695,8 +744,18 @@ _cc = _dotenv("VO_CC_BASE") or f"http://127.0.0.1:{_dotenv('VO_CC_PORT', '3000')
 def _page(path):
     try:
         return httpx.get(_cc + path, timeout=30).text
-    except Exception:
+    except httpx.HTTPError:
         return ""
+
+
+def _status(path):
+    """Status code, or 0 if the Control Center is unreachable. Returning a number
+    rather than raising keeps a dead dependency from killing the run before the
+    accumulated failures are printed."""
+    try:
+        return httpx.get(_cc + path, timeout=30).status_code
+    except httpx.HTTPError:
+        return 0
 
 
 def _text(path):
@@ -719,13 +778,14 @@ check("HR really does report terminations, so 'no lens knows' is false for emplo
 
 # Every chapter the manual links to must exist. A silent fallback to Overview hid
 # renamed chapters from CI and from readers alike.
-_chs = sorted(set(re.findall(r'href="/manual\?ch=([a-z_]+)"', _page("/manual"))))
-_bad_ch = [ch for ch in _chs if httpx.get(f"{_cc}/manual?ch={ch}", timeout=30).status_code != 200]
+# [A-Za-z0-9_-]+, not [a-z_]+: the narrow class silently skipped any chapter id with a
+# digit or a hyphen, which is precisely the miss this check exists to catch.
+_chs = sorted(set(re.findall(r'href="/manual\?ch=([A-Za-z0-9_-]+)"', _page("/manual"))))
+_bad_ch = [ch for ch in _chs if _status(f"/manual?ch={ch}") != 200]
 check("every chapter the manual links to resolves", _chs and not _bad_ch,
       f"{len(_chs)} chapters, broken: {_bad_ch or 'none'}")
 check("an unknown chapter is refused rather than silently shown as Overview",
-      httpx.get(f"{_cc}/manual?ch=definitely-not-a-chapter", timeout=30).status_code == 404,
-      "404")
+      _status("/manual?ch=definitely-not-a-chapter") == 404, "404")
 
 # A lens page must describe the entity it actually serves.
 for _lid, _want in (("iam", "person"), ("hr", "person"), ("servicenow", "asset")):
@@ -743,6 +803,46 @@ if _hs:
             _floors.append(f"{_lid}={_m.group(1)}")
     check("no lens page claims retention from before the world started",
           not _floors, f"world starts {_hs}; offenders: {_floors or 'none'}")
+
+# ---- 8. the .env loader, which has been exploitable twice
+#
+# Both times it looked fixed. The first fix used eval; the second whitelisted keys with
+# `[A-Za-z_][A-Za-z0-9_]*`, which in a shell `case` constrains only the first two
+# characters, so `ab[$(cmd)]` walked straight through it and bash's indirect expansion
+# evaluated the subscript. Guard the behaviour rather than the implementation. Runs
+# entirely in a temp directory: it never reads or writes the real .env.
+print("\nEnvironment loader")
+import shutil as _shutil, subprocess as _sp, tempfile as _tf
+
+_PAYLOADS = ["x-$(touch PWNED)=1", "`touch PWNED`=1", "AB;touch PWNED=1",
+             "ab[$(touch PWNED)]=1", "a[$(touch PWNED)]=1", "_[`touch PWNED`]=1"]
+_loader = os.path.join(ROOT, "scripts", "_dotenv.sh")
+if not os.path.exists(_loader):
+    check("the shared .env loader exists", False, "scripts/_dotenv.sh is missing")
+else:
+    _pwned = []
+    with _tf.TemporaryDirectory() as _d:
+        os.makedirs(os.path.join(_d, "scripts"), exist_ok=True)
+        _shutil.copy(_loader, os.path.join(_d, "scripts", "_dotenv.sh"))
+        for _p in _PAYLOADS:
+            open(os.path.join(_d, ".env"), "w").write(_p + "\nVO_MARKER=ok\n")
+            _sp.run(["bash", "-c", ". ./scripts/_dotenv.sh; vo_load_dotenv"],
+                    cwd=_d, capture_output=True, timeout=30)
+            if os.path.exists(os.path.join(_d, "PWNED")):
+                _pwned.append(_p)
+                os.remove(os.path.join(_d, "PWNED"))
+        check("a crafted .env key cannot execute commands",
+              not _pwned, f"{len(_PAYLOADS)} payloads refused"
+              if not _pwned else f"EXECUTED: {_pwned}")
+
+        # and it must still do its job
+        open(os.path.join(_d, ".env"), "w").write(
+            'VO_CC_PORT=9999   # comment\nVO_Q="quoted"\nVO_LAST=tail')
+        _r = _sp.run(["bash", "-c", ". ./scripts/_dotenv.sh; vo_load_dotenv; "
+                      "echo \"$VO_CC_PORT|$VO_Q|$VO_LAST\""],
+                     cwd=_d, capture_output=True, text=True, timeout=30)
+        check("the .env loader still reads ports, strips comments and quotes",
+              _r.stdout.strip() == "9999|quoted|tail", _r.stdout.strip() or _r.stderr.strip()[:60])
 
 print()
 if fails:

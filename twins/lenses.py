@@ -1,9 +1,16 @@
 """
 Loss application. The world is always true; every degradation happens here.
 
-A lens can only return entities present in lens_visibility, must call them by the
-identifier IT uses, cannot see past its retention window, and cannot see anything
-newer than its sync latency.
+A lens can only return entities present in lens_visibility and must call them by the
+identifier IT uses.
+
+The retention and latency window applies to lenses that serve a TIME SERIES: Splunk
+alerts, scanner findings, ServiceNow incidents. Those genuinely drop rows outside the
+window. The GRC, HR, IAM and EDR lenses serve CURRENT STATE, so there is no historical
+feed to truncate; for them `latency_minutes` and `retention_days` describe how stale
+the sync can be, not a cutoff applied to rows. `coverage_note()` reports which of the
+two a lens is, so the Control Center can say so rather than implying a boundary the
+API does not enforce.
 """
 import datetime as dt
 from . import db
@@ -40,8 +47,14 @@ def visible_ids(lens_id, kind):
                     WHERE lens_id = %s AND entity_kind = %s""", (lens_id, kind))
     return {r["entity_id"]: r for r in rows}
 
+# The lenses that actually truncate rows against horizon()/floor(). The rest serve
+# current state, so the window describes sync staleness rather than a data cutoff.
+TIME_SERIES = {"splunk", "scanner", "servicenow"}
+
+
 def coverage_note(lens_id):
     l = lens(lens_id)
     return {"coverage": float(l["coverage"]), "identifier_style": l["identifier_style"],
             "latency_minutes": l["latency_minutes"], "retention_days": l["retention_days"],
+            "window_enforced": lens_id in TIME_SERIES,
             "blind_spot": l["blind_spot"]}

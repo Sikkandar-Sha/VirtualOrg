@@ -84,7 +84,8 @@
   <h2>World contents</h2>
   <div class="wrap"><table>
     <tr><th>Table</th><th class="num">Rows</th></tr>
-    {% for c in counts if c.rows %}
+    {# every table, including empty ones: DESIGN #7 says silence must be distinguishable from health, and this is the surface that shows it #}
+    {% for c in counts %}
     <tr><td class="id">{{ c.table }}</td><td class="num">{{ "{:,}".format(c.rows) }}</td></tr>
     {% endfor %}
   </table></div>

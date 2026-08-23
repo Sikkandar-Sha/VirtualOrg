@@ -8,15 +8,36 @@ here than ordinary semver because the artefact is a generated world.
 
 ## Unreleased
 
+### Security
+- **`/healthz` on the twin gateway no longer returns the world's identifying metadata
+  to an unauthenticated caller.** Seed, as-of, scale and chaos reproduce the world
+  byte-identically and the generator ships here, so those values are the answer key,
+  and the twin gateway is the one surface the kit under test is pointed at. An
+  adversarial review rebuilt all 1,260 expectations and every trap offline from that
+  endpoint alone, with no credential. Liveness, `auth_mode` and the lens list stay
+  open, which is all probes and CI ever needed. It matters most when benchmarking
+  someone else's product against a private seed.
+- **The `.env` reader in `scripts/status` no longer uses `eval`.** A crafted key such
+  as `x-$(...)=1` executed arbitrary shell as whoever ran the script, and `.env` is a
+  file the README tells people to edit. The loader now lives once in
+  `scripts/_dotenv.sh`, whitelists keys and uses indirect expansion; `seed`, `snapshot`
+  and `reset` now read `.env` through it too, which they previously ignored entirely.
+- **Malformed input returns 400, not 500.** A NUL byte in any filter, and an
+  out-of-range integer offset, produced a bare Internal Server Error from both
+  services. The twins' contract is that they are always well behaved and that
+  adversarial behaviour lives in WireMock in front of them, so a 5xx from the twin
+  broke a guarantee a connector is graded against. A negative pagination cursor no
+  longer returns an empty page with a valid forward cursor.
+
 ### Changed
-- **`generator_version` is now `5`. Golden files from version 4 and earlier must be rebaselined.**
+- **`generator_version` is now `6`. Golden files from version 4 and earlier must be rebaselined.**
   The world contract below requires this to be called out, so here it is in full:
   - `attachment.sha256` is now `attachment.content_seed`. The digest the GRC API
     advertises is computed from the bytes it serves, so a connector that verifies a
     checksum now succeeds. Previously none could.
   - Expectation counts changed. The catalogue was capped at 200 end-of-life assets
     while the world generated 260, which charged a correct kit a false positive for
-    every asset past the cut. The caps are gone: 1,263 expectations, up from 1,217.
+    every asset past the cut. The caps are gone: 1,260 expectations, up from 1,217.
   - Evidence labelling now draws from alerts the SIEM can still return, before
     falling back to the rest. The sample size is unchanged, so the world still
     advertises the same totals, but links a connector can actually retrieve rise
@@ -45,11 +66,11 @@ The first complete state: a world, seven lenses, and the ground truth to score a
 - **Seven lenses.** ServiceNow, Splunk, Onspring, Okta, Tenable, Workday and
   CrowdStrike, covering all seven connector patterns in DESIGN.md #5, plus framework
   and taxonomy sync and binary evidence retrieval.
-- **Ground truth.** 1,263 expectations across attribution, conflict, degradation and
-  absence, with 4,983 true evidence links and 747 deliberate traps.
+- **Ground truth.** 1,260 expectations across attribution, conflict, degradation and
+  absence, with 5,002 true evidence links and 734 deliberate traps.
 - **Control Center.** Eight surfaces generated from the world, so the documentation
   cannot drift from what a connector actually reads, including an eight-chapter manual.
-- **Harness.** 97 self-checks, a three-level chaos dial, real OAuth against Keycloak,
+- **Harness.** 103 self-checks, a three-level chaos dial, real OAuth against Keycloak,
   and an adversarial WireMock proxy for the degradation family.
 - **Provenance manifests.** Every twin records where its response shapes came from.
   All seven are `unverified`.

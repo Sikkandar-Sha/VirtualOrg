@@ -53,8 +53,8 @@ CREATE TABLE group_membership (
 CREATE TABLE asset (
   id              text PRIMARY KEY,
   hostname        text NOT NULL,           -- LT-4471
-  fqdn            text NOT NULL,           -- lt4471.corp.local
-  asset_tag       text NOT NULL,           -- AT-009912
+  fqdn            text NOT NULL,           -- lt-4471.corp.local
+  asset_tag       text NOT NULL,           -- AT-900001
   ip              inet NOT NULL,           -- recycled over time
   kind            text NOT NULL CHECK (kind IN ('endpoint','server','cloud')),
   os_family       text NOT NULL,

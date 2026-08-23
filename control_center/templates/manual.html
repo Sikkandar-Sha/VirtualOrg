@@ -150,7 +150,7 @@
         <td class="id"><b>{{ r.table }}</b></td>
         <td class="num">{{ "{:,}".format(r.rows) }}</td>
         <td colspan="2"><span class="void">no API reaches this</span></td>
-        <td class="dim">{{ (r.why_not or 'Not exposed by any lens.') | safe }}</td>
+        <td class="dim">{{ (r.why_not or 'Not documented on this page yet. Check the API reference before assuming it is unreachable.') | safe }}</td>
       </tr>
     {% endif %}
   {% endfor %}
@@ -207,7 +207,7 @@
 </table></div>
 
 <h2>The queries</h2>
-<p class="note">Nothing above is computed in application code: each row is one of these.</p>
+<p class="note">Each gap above is one of these queries. The Total and Share columns are the only computed values on this page: a second count query, and a percentage of it.</p>
 <pre>{% for g in gaps %}-- {{ g.label }}  →  {{ g.n }}
 {{ g.sql }}
 

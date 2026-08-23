@@ -29,7 +29,9 @@ import httpx
 from urllib.parse import urlparse
 
 BASE = os.environ.get("VO_BASE", "http://127.0.0.1:8080")
-TOKEN = os.environ.get("VO_TOKEN", "vo-dev-token")
+# VO_TOKENS is the variable .env and docker-compose actually define.
+TOKEN = os.environ.get("VO_TOKEN") or \
+    os.environ.get("VO_TOKENS", "vo-dev-token").split(",")[0]
 c = httpx.Client(base_url=BASE, headers={"Authorization": f"Bearer {TOKEN}"}, timeout=60)
 
 
@@ -113,7 +115,11 @@ def async_job(search):
 
 
 def main():
-    meta = c.get("/healthz").json()["world"]
+    _hz = c.get("/healthz").json()
+    if "world" not in _hz:
+        raise SystemExit(f"the gateway did not accept this token; set VO_TOKENS or "
+                         f"VO_TOKEN to a value it knows")
+    meta = _hz["world"]
     as_of = dt.date.fromisoformat(meta["as_of"])
     findings, attributions = [], []
 

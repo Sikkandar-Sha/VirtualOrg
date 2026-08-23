@@ -2,6 +2,8 @@
 # Regenerate the world from scratch, then snapshot it as a restorable baseline.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. "$(dirname "$0")/_dotenv.sh"
+vo_load_dotenv
 NAME="${1:-baseline}"
 # The dev password, same one docker-compose.yml and SECURITY.md name. Without
 # it psql fails from the host: the container trusts loopback only from inside.

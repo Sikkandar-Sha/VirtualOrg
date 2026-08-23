@@ -167,8 +167,11 @@ class Gen:
                                    tzinfo=dt.timezone.utc)
 
 # --------------------------------------------------------------------------- build
-# Splunk's retention and sync latency. Named once: the evidence sampler and the
-# lens row must agree, or the labelled corpus stops matching what the API returns.
+# Splunk's retention and sync latency at chaos 1. The evidence sampler and the lens
+# row must agree here, or the labelled corpus stops matching what the API returns.
+# Chaos 0 deliberately rewrites the lens row to a lossless window; the sampler keeps
+# these values, which is harmless because at chaos 0 every alert is inside the window
+# anyway. Anything other than that pairing needs both sites changed together.
 SPLUNK_RETENTION_DAYS = 90
 SPLUNK_LATENCY_MIN = 5
 
@@ -211,8 +214,16 @@ def build(g: argparse.Namespace, gen: Gen):
 
     # ---- accounts (orphaned access for some leavers = planted conflict)
     accounts, orphaned = [], []
+    # A slice of people are never federated to the IdP: they hold an AD account and no
+    # Okta one. The lens row has always described this as its blind spot and the README
+    # has always claimed it, but the world did not produce a single such account, so
+    # the 26 people the IdP could not see were hidden by the coverage roll instead.
+    # Its own stream, so adding it cannot shift any later draw.
+    r_fed = random.Random(g.seed ^ 0xFED)
+    unfederated = {p["id"] for p in people if r_fed.random() < 0.06}
     for i, p in enumerate(people, 1):
-        for sysname in ("ad", "okta"):
+        systems = ("ad",) if p["id"] in unfederated else ("ad", "okta")
+        for sysname in systems:
             aid = f"IDN-{i:04d}-{sysname}"
             disabled = p["ended"]
             if p["ended"] and r.random() < 0.30:    # 30% of leavers keep an account
@@ -462,7 +473,7 @@ def build(g: argparse.Namespace, gen: Gen):
         closed = opened + dt.timedelta(hours=r.randint(2, 200))
         # The world has a fixed now. An incident that closes after it makes every
         # age and MTTR calculation over this feed wrong.
-        if closed.date() > today:
+        if closed > dt.datetime.combine(today, dt.time(9, 0), tzinfo=dt.timezone.utc):
             closed = None
         sev = r.randint(1, 4)
         impact = "no customer impact" if r.random() < 0.45 else "customer impacting"
@@ -646,6 +657,10 @@ def build(g: argparse.Namespace, gen: Gen):
                     continue
                 silent = r.random() < 0.12
                 age = r.randint(9, 40) * 24 if silent else r.randint(0, 3)
+                # Never older than the machine itself: the EDR derives first_seen from
+                # procured_on, and a last_seen before it is not a lossy view of
+                # anything, just an impossible record.
+                age = min(age, max(0, (today - a["procured"]).days * 24))
                 if chaos == 0:            # draws already taken, results overridden
                     silent, age = False, 0
                 vis.append((lid, "asset", a["id"],
@@ -957,7 +972,7 @@ def build(g: argparse.Namespace, gen: Gen):
         ("seed", str(g.seed)), ("as_of", today.isoformat()),
         ("history_start", start.isoformat()), ("scale", str(gen.scale)),
         ("chaos", str(chaos)), ("mangled_identifiers", str(mangled)),
-        ("generator_version", "5"),
+        ("generator_version", "6"),
     ])
 
 # --------------------------------------------------------------------------- load
