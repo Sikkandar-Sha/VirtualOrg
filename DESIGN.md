@@ -597,7 +597,7 @@ three alerts.
 | Real SIEM (Wazuh / Elastic) | Something to connect to | Twin serves identical JSON. Also no official ARM64 Wazuh images. |
 | Sysmon, Zeek, Suricata | Produce logs for the SIEM | Nothing ingests logs — kit is API-only |
 | Windows VMs, AD lab | Produce Windows telemetry | No consumer |
-| CALDERA, Atomic Red Team, GOAD | Produce attack telemetry | No consumer. Unsafe on a Tailscale-connected work machine. |
+| CALDERA, Atomic Red Team, GOAD | Produce attack telemetry | No consumer. Running live attack tooling on a development laptop that holds VPN access to other networks is a bad idea whatever the project. |
 | EvidenceForge | Synthetic security logs | No consumer — and it is a batch file generator, not a live service |
 | OpenTelemetry Demo, Online Boutique | Ambient app telemetry | No consumer |
 | Greenbone / OpenVAS | Real vulnerability findings | Findings are records; the world holds them |

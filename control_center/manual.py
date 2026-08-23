@@ -51,8 +51,8 @@ DOMAINS = [
      ]),
     ("Governance", "Framework, requirements, controls, tests, audits, findings and the "
      "risk register. The GRC lens's territory.", [
-        ("framework", "ISO/IEC 27001:2022."),
-        ("requirement", "~100 clauses."),
+        ("framework", "ISO/IEC 27001 and NIST CSF 2.0."),
+        ("requirement", "Clauses across both frameworks."),
         ("control", "~100 controls. `owner_person_id` may point at a leaver."),
         ("control_mapping", "Control → requirement with **coverage strength**, not a "
          "boolean. This is what lets a failure be explained, not just computed."),
@@ -97,7 +97,7 @@ DOMAINS = [
     ("Ground truth", "The assertion catalogue, materialised as rows.", [
         ("expectation", "Every row is something the kit should conclude, or should "
          "refuse to conclude. Four families: attribution, conflict, degradation, absence."),
-        ("world_meta", "Seed, as-of date, scale. Reproducibility metadata."),
+        ("world_meta", "Seed, as-of, scale, chaos and generator version. The five values that reproduce this world, plus bookkeeping."),
      ]),
 ]
 

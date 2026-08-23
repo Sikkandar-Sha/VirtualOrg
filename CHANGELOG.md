@@ -27,8 +27,8 @@ The first complete state: a world, seven lenses, and the ground truth to score a
 - **Ground truth.** 1,217 expectations across attribution, conflict, degradation and
   absence, with 5,023 true evidence links and 773 deliberate traps.
 - **Control Center.** Eight surfaces generated from the world, so the documentation
-  cannot drift from what a connector actually reads, including a seven-chapter manual.
-- **Harness.** 88 self-checks, a three-level chaos dial, real OAuth against Keycloak,
+  cannot drift from what a connector actually reads, including an eight-chapter manual.
+- **Harness.** 89 self-checks, a three-level chaos dial, real OAuth against Keycloak,
   and an adversarial WireMock proxy for the degradation family.
 - **Provenance manifests.** Every twin records where its response shapes came from.
   All seven are `unverified`.

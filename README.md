@@ -4,7 +4,7 @@
 included.**
 
 [![licence](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
-[![checks](https://img.shields.io/badge/self--checks-88%20passing-brightgreen)](scripts/verify.py)
+[![checks](https://img.shields.io/badge/self--checks-89%20passing-brightgreen)](scripts/verify.py)
 [![boot](https://img.shields.io/badge/cold%20boot-~7s-brightgreen)](#run-it)
 [![lenses](https://img.shields.io/badge/vendor%20lenses-7-informational)](#the-seven-lenses)
 
@@ -87,7 +87,7 @@ real OAuth, and an adversarial proxy that returns 429s and expired tokens on dem
 | **Writing connectors** | Seven live API patterns: async job, cursor, offset, Link header, page number, incremental `since` and query-then-hydrate, plus binary evidence retrieval behind a second credential |
 | **Testing entity resolution** | One machine under five identifiers, recycled IPs so the IP is not a key, and one join that *does* work so you can tell the difference |
 | **Guarding against regressions** | A deterministic world and a restorable baseline, so any posture delta is a real finding |
-| **Scoring inference quality** | 5,023 true evidence links and 773 deliberate traps |
+| **Scoring inference quality** | 5,023 true evidence links and 773 deliberate decoys |
 | **Proving deployability** | Three customer schema profiles per vendor. Passing all three means the connector ships. Passing only `out-of-the-box` means it demos |
 | **Demoing** | *"Here are the 52 machines with no endpoint agent, and the 7 control exceptions that expired months ago. A GRC platform will never tell you that."* |
 
@@ -112,7 +112,7 @@ Run your kit from your IDE with a debugger attached, pointed at
 See DESIGN.md #2 for why.
 
 ```bash
-docker compose --profile ci up -d      # CI: also runs the kit in-network
+docker compose --profile chaos up -d   # adds WireMock in front of a twin (see wiremock/README.md)
 docker compose --profile chaos up -d   # adds WireMock in front of a twin (see wiremock/README.md)
 ```
 
@@ -123,16 +123,18 @@ docker compose --profile chaos up -d   # adds WireMock in front of a twin (see w
 | `/servicenow/api/now/table/{table}` | generic table API | offset pagination, customer-defined fields | 97% coverage, nightly sync, identifies by **FQDN** |
 
 `{table}` is one of `incident`, `cmdb_ci_computer`, `cmdb_ci_appl`, `cmdb_ci_service`,
-`cmdb_rel_ci`. The relationship table makes the spine walkable: service → application →
+`cmdb_ci_business_process`, `cmdb_sam_sw_install`, `cmdb_rel_ci`. Seven in all. The relationship table makes the spine walkable: service → application →
 asset, with children named exactly as the CI tables name them.
 | `/splunk/services/search/jobs` | async search job | submit → poll → fetch | 83% coverage, 5 min latency, 90d retention, identifies by **IP** |
-| `/grc/api/v1/{object}` | governance objects | cursor pagination | full coverage, weekly sync, identifies by **asset tag** |
+| `/grc/api/v1/{object}` | governance objects | cursor pagination | 91% coverage, weekly sync, identifies by **asset tag** |
 | `/iam/api/v1/users` | identity provider | **Link-header** pagination | 94% coverage, 15 min sync, identifies people by **login** |
 | `/scanner/api/v3/findings` | vulnerability scanner | **incremental `since`** polling | 88% coverage, 24h sync, 365d retention, identifies by **hostname** |
 | `/hr/api/v1/workers` | HCM system of record | **page / per_page** | employees only, contractors are structurally absent, identifies by **employee id** |
 | `/edr/devices/...` | endpoint detection | **query then hydrate** | 79% coverage, 5 min sync, 30d retention, identifies by **agent id** |
 
-`{object}` is one of `controls`, `assets`, `findings`, `risks`, `control-mappings`.
+`{object}` is one of `controls`, `assets`, `findings`, `risks`, `control-mappings`,
+`frameworks`, `requirements`, `crosswalks`, `policies`, `exceptions`, `treatments`, and
+the attachment routes below. Thirteen in all.
 
 Five identifier styles for the same machine (fqdn, ip, asset tag, hostname, agent id)
 and two more for people: an IdP login and an HR employee number. No two lenses name the same thing the same way, and no lens sees all of it. That is
@@ -194,8 +196,8 @@ same control failure moves ISO and CSF by different amounts, and you can say why
 ## Binary evidence
 
 ```bash
-curl -s -H "$H" localhost:8080/grc/api/v1/findings/AF-054/attachments
-curl -s -H "$H" 'localhost:8080/grc/api/v1/attachments/ATT-0123/content?token=...' -o out.png
+curl -s -H "$H" localhost:8080/grc/api/v1/findings/AF-001/attachments
+curl -s -H "$H" 'localhost:8080/grc/api/v1/attachments/ATT-0001/content?token=...' -o out.txt
 ```
 
 Metadata carries size, media type, a SHA-256 and a `download_token`. The bytes need
@@ -261,7 +263,7 @@ different world.
 
 **`examples/reference-kit/`** is a small, readable consumer that produces one. It is
 deliberately naive: it attributes alerts to controls by matching words in the rule name
-against words in the control title, which is exactly the inference the 773 traps exist
+against words in the control title, which is exactly the inference the 773 decoys exist
 to punish. Its score above is what that approach is worth.
 
 ## Ground truth
@@ -282,7 +284,7 @@ absence     leaver is a contractor, so no HR record confirms the termination    
 absence     application is not attached to any business service                          3
 absence     policy is approved but no control implements it                              3
 absence     asset is live and in ITSM but invisible to every security lens               1
-attribution evidence is topically adjacent to the control but is not evidence for it   773
+attribution evidence is linked to a control it does not evidence                       773
 conflict    person has left but an account remains enabled                              31
 conflict    person has left but retains membership of a privileged group                21
 conflict    control tested effective while an overdue audit finding stands against it   21
@@ -300,8 +302,9 @@ All four assertion families are now live from the world itself. Degradation used
 WireMock-only.
 
 `world.evidence.control_id` is the **true** control attribution for every event, and
-`is_trap` marks the topically-adjacent decoys. Score the kit's attribution as precision
-and recall against that column.
+`is_trap` marks the decoys. Score attribution as precision and recall against that
+column: a decoy is not inferable from topic alone, so what it measures is whether a
+system will assert a link it cannot support.
 
 ## Reset loop
 
@@ -318,7 +321,8 @@ That is what makes world-state `W₁` → posture `P₁` golden-file testing usa
 
 ## Determinism
 
-Same seed + same `--as-of` ⇒ byte-identical world. Never use a live clock.
+Same `(seed, as-of, scale, chaos, generator_version)` produces a byte-identical world.
+Never use a live clock. See [the world contract](CHANGELOG.md#the-world-contract).
 
 ```bash
 python3 world/generate.py --seed 48392 --as-of 2026-08-21 --scale 1.0
@@ -358,10 +362,11 @@ open http://localhost:3000        # or $VO_CC_PORT
 | 4 | `/org` | Browsable inventory, filters, drill-down |
 | 5 | `/groundtruth` | The assertion catalogue |
 | 6 | `/scenario` | Baselines and chaos state, read-only (see below) |
-| 7 | `/manual` | **The manual.** How it works, how to connect, every entity and endpoint |
+| 7 | `/manual` | **The manual.** Eight chapters: how it works, how to connect, every entity and endpoint |
 
-It is **read-only over world-db and the twins, and computes nothing**. If a number
-appears there it is a query, never a calculation: two implementations of "what is true
+It is **read-only over world-db and the twins, and derives nothing**. Every substantive
+number is a query; the only arithmetic is presentational, turning a stored fraction into
+a percentage or a byte count into megabytes: two implementations of "what is true
 about this enterprise" would be the exact bug the product exists to detect, built
 inside the harness meant to detect it. Surface 6 shows commands rather than running
 them, for the same reason.
@@ -506,7 +511,7 @@ git checkout dev && git push                 # day to day
 git checkout main && git merge --ff-only dev && git push   # when it is ready
 ```
 
-CI runs on both: it boots the whole environment, runs the 80 self-checks, loads every
+CI runs on both: it boots the whole environment, runs the 89 self-checks, loads every
 Control Center surface, exercises the chaos proxy and real OAuth, and regenerates the
 world twice to prove determinism.
 

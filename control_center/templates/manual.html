@@ -246,8 +246,11 @@
 </table></div>
 
 <h2>2 · Authenticate</h2>
-<p class="note">Static bearer token today. Every endpoint except <code>/healthz</code> and
-  <code>/_lens/{id}</code> requires it; a missing or wrong token is a <code>401</code>.</p>
+<p class="note">Static bearer token today. <b>Every endpoint except <code>/healthz</code>
+  requires it</b>, including the <code>/_lens/{id}</code> and <code>/_provenance</code>
+  metadata routes. A missing or wrong token is a <code>401</code>. <code>/healthz</code>
+  stays open because probes and CI need to know the service is up before they have
+  anything to authenticate with, and it returns only liveness and the world seed.</p>
 <pre>Authorization: Bearer {{ token }}</pre>
 <p class="note">The examples below reference <code>$VO_TOKEN</code> rather than a literal
   value, because this page has no authentication and should not print a credential.
@@ -551,8 +554,9 @@
 <h2>Scoring attribution</h2>
 <p class="note">Nothing in any vendor API links a detection to a control, that inference is
   the kit's core job. <code>world.evidence.control_id</code> is the true answer for every
-  event, and <code>is_trap</code> marks events that are topically adjacent to a control but
-  are <b>not</b> evidence for it.</p>
+  event, and <code>is_trap</code> marks events linked to a control they do <b>not</b>
+  evidence. A decoy is not inferable from topic alone: it exists to measure whether a
+  system asserts a link it cannot support, rather than to reward a better classifier.</p>
 <div class="status">
   <div><div class="k">True links</div><div class="v">{{ "{:,}".format(corpus.true_links) }}</div></div>
   <div><div class="k">Traps</div><div class="v">{{ "{:,}".format(corpus.traps) }}</div></div>

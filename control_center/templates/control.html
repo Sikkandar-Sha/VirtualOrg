@@ -21,7 +21,7 @@
   <tr><th>Kind</th><th>Genuine evidence</th><th class="num">Rows</th></tr>
   {% for s in summary %}
   <tr><td>{{ s.kind }}</td>
-      <td>{% if s.is_trap %}<span class="tag trap">trap, topically adjacent</span>{% else %}yes{% endif %}</td>
+      <td>{% if s.is_trap %}<span class="tag trap">decoy, not evidence</span>{% else %}yes{% endif %}</td>
       <td class="num">{{ s.n }}</td></tr>
   {% endfor %}
 </table></div>

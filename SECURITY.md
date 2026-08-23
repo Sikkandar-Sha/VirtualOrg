@@ -55,12 +55,14 @@ nothing still leaves them unguessable:
 
 The Control Center renders no credential on any page, not even the shipped default.
 Its examples reference `$VO_TOKEN`, so they stay copy-pasteable without publishing a
-token on a surface that has no authentication. CI asserts this across every page.
+token on a surface that has no authentication. CI asserts it across every surface and
+every manual chapter.
 
-Every endpoint except `/healthz` requires a credential, including the `/_lens/{id}` and
-`/_provenance` metadata routes. `/healthz` stays open because probes and CI need to know
-the service is up before they have anything to authenticate with, and it returns only
-liveness and the world seed.
+Every data endpoint requires a credential, including the `/_lens/{id}` and
+`/_provenance` metadata routes. Three paths stay open: `/healthz`, which probes and CI
+need before they have anything to authenticate with and which returns only liveness and
+the world's identifying metadata, and FastAPI's own `/docs` and `/openapi.json`, which
+describe the interface and expose no data.
 
 ## What VirtualOrg is not
 

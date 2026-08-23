@@ -48,8 +48,9 @@ proxy, real OAuth, and a determinism check.
 
 A lens is a scope query, a loss profile and a response shape. Roughly a day's work:
 
-1. Add a row to the `lenses` list in `world/generate.py`, with honest coverage, latency,
-   retention, identifier style and blind spot.
+1. Add a row to the `base_lenses` list in `world/generate.py`, with honest coverage,
+   latency, retention, identifier style and blind spot. The `lenses` name is derived from
+   it, and the chaos dial rewrites it at level 0.
 2. Give it visibility rows in the same loop. A missing row means that lens is
    structurally blind to that entity, which is a feature.
 3. Add the vendor face to `twins/app.py`. Twins are **always well behaved**: no injected

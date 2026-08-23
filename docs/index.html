@@ -237,7 +237,7 @@ footer a{color:var(--ink-2)}
     <div class="stats">
       <div><div class="n">1,217</div><div class="k">assertions</div></div>
       <div><div class="n">5,023</div><div class="k">evidence links</div></div>
-      <div><div class="n">773</div><div class="k">traps</div></div>
+      <div><div class="n">773</div><div class="k">decoys</div></div>
       <div><div class="n">7</div><div class="k">lenses</div></div>
       <div><div class="n">~7s</div><div class="k">cold boot</div></div>
     </div>
@@ -247,7 +247,7 @@ footer a{color:var(--ink-2)}
     <div class="fam">
       <div><h3>Attribution</h3><p>Is this event genuine evidence for this control? Nothing
         in any vendor API links a detection to a control. That inference is your product's
-        core job.</p><span class="n">5,023 links · 773 traps</span></div>
+        core job.</p><span class="n">5,023 links · 773 decoys</span></div>
       <div><h3>Conflict</h3><p>Sources disagree. Resolve it with a defensible rule or
         surface it. Either is valid; silently picking a winner is not.</p>
         <span class="n">129 planted</span></div>
@@ -296,7 +296,7 @@ open http://localhost:3000    # the Control Center</code></pre>
     <p style="margin-top:22px">Point your product at
       <code>config/virtualorg/connectors.yaml</code>. The whole environment switch is a
       config file, never a patched build. Then run
-      <code>python3 scripts/verify.py</code>: 80 self-checks that prove the conditions
+      <code>python3 scripts/verify.py</code>: 89 self-checks that prove the conditions
       the ground truth claims exist are genuinely observable through the vendor APIs.</p>
   </div>
 </section>

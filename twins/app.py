@@ -17,6 +17,7 @@ from typing import Optional
 import yaml
 from fastapi import FastAPI, HTTPException, Header, Query, Request
 from fastapi.responses import JSONResponse, Response
+from urllib.parse import quote
 
 from . import db, lenses
 
@@ -175,8 +176,8 @@ SNOW = "/servicenow/api/now/table"
 
 @app.get(SNOW + "/{table}")
 def snow_table(table: str,
-               sysparm_limit: int = Query(100, le=1000),
-               sysparm_offset: int = 0,
+               sysparm_limit: int = Query(100, ge=1, le=1000),
+               sysparm_offset: int = Query(0, ge=0),
                sysparm_query: Optional[str] = None,
                x_vo_profile: Optional[str] = Header(None),
                authorization: Optional[str] = Header(None)):
@@ -367,14 +368,16 @@ def _count(job):
 
 
 @app.get(SPL + "/{sid}/results")
-def splunk_job_results(sid: str, offset: int = 0, count: int = Query(100, le=5000),
+def splunk_job_results(sid: str, offset: int = Query(0, ge=0), count: int = Query(100, ge=1, le=5000),
                        authorization: Optional[str] = Header(None)):
     require_token(authorization)
     job = _JOBS.get(sid)
     if not job:
         raise HTTPException(404, "unknown sid")
     if job["polls"] < 2:
-        raise HTTPException(204, "job not finished")
+        # 204 means no content, so it must not carry one. A body here is a protocol
+        # violation that some HTTP clients reject outright.
+        return Response(status_code=204)
     hz, fl = lenses.horizon("splunk"), lenses.floor("splunk")
     rule = _rule_filter(job["search"])
     sql = """SELECT a.id, a.severity, a.occurred_at, r.name AS rule_name, a.rule_id,
@@ -407,7 +410,7 @@ HR = "/hr/api/v1"
 
 
 @app.get(HR + "/workers")
-def hr_workers(page: int = 1, per_page: int = Query(100, le=1000),
+def hr_workers(page: int = Query(1, ge=1), per_page: int = Query(100, ge=1, le=1000),
                active: Optional[bool] = None,
                authorization: Optional[str] = Header(None)):
     require_token(authorization)
@@ -457,7 +460,7 @@ def _edr_rows():
 
 
 @app.get(EDR + "/queries/devices/v1")
-def edr_query(limit: int = Query(100, le=5000), offset: int = 0,
+def edr_query(limit: int = Query(100, ge=1, le=5000), offset: int = Query(0, ge=0),
               authorization: Optional[str] = Header(None)):
     """Step 1 of 2, ids only. No device detail is returned here, by design."""
     require_token(authorization)
@@ -474,8 +477,16 @@ async def edr_hydrate(request: Request, authorization: Optional[str] = Header(No
     """Step 2 of 2, hydrate ids from step 1. Unknown ids are silently absent from
     the response rather than raising, exactly as a real bulk endpoint behaves."""
     require_token(authorization)
-    body = await request.json()
-    want = set(body.get("ids") or [])
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "body must be JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "body must be a JSON object with an `ids` array")
+    ids = body.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        raise HTTPException(400, "`ids` must be an array of strings")
+    want = set(ids)
     if not want:
         raise HTTPException(400, "ids is required")
     now = lenses.world_now()
@@ -541,7 +552,7 @@ def _iam_user(r, v):
 
 
 @app.get(IAM + "/users")
-def iam_users(limit: int = Query(200, le=1000), after: Optional[str] = None,
+def iam_users(limit: int = Query(200, ge=1, le=1000), after: Optional[str] = None,
               filter: Optional[str] = None, request: Request = None,
               authorization: Optional[str] = Header(None)):
     require_token(authorization)
@@ -554,9 +565,13 @@ def iam_users(limit: int = Query(200, le=1000), after: Optional[str] = None,
     start = _decode(after)
     page = users[start:start + limit]
     headers = {"X-Total-Count": str(len(users))}
-    links = [f'<{IAM}/users?limit={limit}&after={_encode(start)}>; rel="self"']
+    # The filter has to travel with the cursor. Dropping it would hand the caller a
+    # second page drawn from the unfiltered set at a filtered offset, which is both
+    # wrong and very hard to notice.
+    keep = f"&filter={quote(filter)}" if filter else ""
+    links = [f'<{IAM}/users?limit={limit}&after={_encode(start)}{keep}>; rel="self"']
     if start + limit < len(users):
-        links.append(f'<{IAM}/users?limit={limit}&after={_encode(start + limit)}>; rel="next"')
+        links.append(f'<{IAM}/users?limit={limit}&after={_encode(start + limit)}{keep}>; rel="next"')
     headers["Link"] = ", ".join(links)
     return JSONResponse(page, headers=headers)
 
@@ -616,7 +631,8 @@ def _sev(cvss):
 
 
 @app.get(SCAN + "/findings")
-def scanner_findings(since: Optional[str] = None, limit: int = Query(500, le=5000),
+def scanner_findings(since: Optional[str] = None, since_id: Optional[str] = None,
+                     limit: int = Query(500, ge=1, le=5000),
                      state: Optional[str] = None,
                      authorization: Optional[str] = Header(None)):
     require_token(authorization)
@@ -644,6 +660,10 @@ def scanner_findings(since: Optional[str] = None, limit: int = Query(500, le=500
                     "asset": {"hostname": r["host"]},  # <- the scanner names by hostname
                     "first_found": iso(r["discovered_on"]), "last_found": iso(last)})
     out.sort(key=lambda x: (x["last_found"], x["finding_id"]))
+    # Timestamps here are coarse: many findings share one. A strict `since` on the
+    # timestamp alone would drop every record that shares the boundary value with the
+    # last row of the previous page. The checkpoint is therefore the pair
+    # (last_found, finding_id), which is unique and totally ordered.
     if since:
         try:
             cut = dt.datetime.fromisoformat(since)
@@ -651,14 +671,18 @@ def scanner_findings(since: Optional[str] = None, limit: int = Query(500, le=500
             raise HTTPException(400, "since must be ISO-8601")
         if cut.tzinfo is None:
             cut = cut.replace(tzinfo=dt.timezone.utc)
-        out = [f for f in out if dt.datetime.fromisoformat(f["last_found"]) > cut]
+        out = [f for f in out
+               if (dt.datetime.fromisoformat(f["last_found"]), f["finding_id"])
+               > (cut, since_id or "")]
     page = out[:limit]
     return {"findings": page, "has_more": len(out) > limit,
-            "next_since": page[-1]["last_found"] if page else since}
+            "next_since": page[-1]["last_found"] if page else since,
+            "next_since_id": page[-1]["finding_id"] if page else since_id}
 
 
 @app.get(SCAN + "/misconfigurations")
-def scanner_misconfigs(since: Optional[str] = None, limit: int = Query(500, le=5000),
+def scanner_misconfigs(since: Optional[str] = None, since_id: Optional[str] = None,
+                       limit: int = Query(500, ge=1, le=5000),
                        state: Optional[str] = None,
                        authorization: Optional[str] = Header(None)):
     """Baseline drift, on the same incremental contract as findings."""
@@ -692,14 +716,17 @@ def scanner_misconfigs(since: Optional[str] = None, limit: int = Query(500, le=5
             raise HTTPException(400, "since must be ISO-8601")
         if cut.tzinfo is None:
             cut = cut.replace(tzinfo=dt.timezone.utc)
-        out = [f for f in out if dt.datetime.fromisoformat(f["last_seen"]) > cut]
+        out = [f for f in out
+               if (dt.datetime.fromisoformat(f["last_seen"]), f["misconfiguration_id"])
+               > (cut, since_id or "")]
     page = out[:limit]
     return {"misconfigurations": page, "has_more": len(out) > limit,
-            "next_since": page[-1]["last_seen"] if page else since}
+            "next_since": page[-1]["last_seen"] if page else since,
+            "next_since_id": page[-1]["misconfiguration_id"] if page else since_id}
 
 
 @app.get(SCAN + "/assets")
-def scanner_assets(limit: int = Query(500, le=5000), offset: int = 0,
+def scanner_assets(limit: int = Query(500, ge=1, le=5000), offset: int = Query(0, ge=0),
                    authorization: Optional[str] = Header(None)):
     require_token(authorization)
     vis = lenses.visible_ids("scanner", "asset")
@@ -741,7 +768,7 @@ def _page(rows, cursor, limit, key="items"):
 
 
 @app.get(GRC + "/controls")
-def grc_controls(cursor: Optional[str] = None, limit: int = Query(50, le=500),
+def grc_controls(cursor: Optional[str] = None, limit: int = Query(50, ge=1, le=500),
                  authorization: Optional[str] = Header(None)):
     require_token(authorization)
     rows = db.q("""SELECT c.ref, c.title, c.test_frequency, c.automated,
@@ -764,7 +791,7 @@ def grc_controls(cursor: Optional[str] = None, limit: int = Query(50, le=500),
 
 @app.get(GRC + "/findings")
 def grc_findings(status: Optional[str] = None, cursor: Optional[str] = None,
-                 limit: int = Query(50, le=500), authorization: Optional[str] = Header(None)):
+                 limit: int = Query(50, ge=1, le=500), authorization: Optional[str] = Header(None)):
     require_token(authorization)
     sql = """SELECT f.id, f.title, f.severity, f.raised_on, f.due_on, f.closed_on,
                     f.status, c.ref AS control_ref
@@ -783,7 +810,7 @@ def grc_findings(status: Optional[str] = None, cursor: Optional[str] = None,
 
 
 @app.get(GRC + "/risks")
-def grc_risks(cursor: Optional[str] = None, limit: int = Query(50, le=500),
+def grc_risks(cursor: Optional[str] = None, limit: int = Query(50, ge=1, le=500),
               authorization: Optional[str] = Header(None)):
     require_token(authorization)
     rows = db.q("""SELECT r.ref, r.title, r.category, r.inherent_score, r.appetite,
@@ -801,7 +828,7 @@ def grc_risks(cursor: Optional[str] = None, limit: int = Query(50, le=500),
 
 
 @app.get(GRC + "/assets")
-def grc_assets(cursor: Optional[str] = None, limit: int = Query(200, le=1000),
+def grc_assets(cursor: Optional[str] = None, limit: int = Query(200, ge=1, le=1000),
                authorization: Optional[str] = Header(None)):
     """The third identifier style. GRC calls the same machine by its asset tag.
 
@@ -826,7 +853,7 @@ def grc_assets(cursor: Optional[str] = None, limit: int = Query(200, le=1000),
 
 
 @app.get(GRC + "/policies")
-def grc_policies(cursor: Optional[str] = None, limit: int = Query(50, le=500),
+def grc_policies(cursor: Optional[str] = None, limit: int = Query(50, ge=1, le=500),
                  authorization: Optional[str] = Header(None)):
     require_token(authorization)
     rows = db.q("""SELECT p.ref, p.title, p.approved_on, p.review_period_days,
@@ -843,7 +870,7 @@ def grc_policies(cursor: Optional[str] = None, limit: int = Query(50, le=500),
 
 @app.get(GRC + "/exceptions")
 def grc_exceptions(status: Optional[str] = None, cursor: Optional[str] = None,
-                   limit: int = Query(50, le=500),
+                   limit: int = Query(50, ge=1, le=500),
                    authorization: Optional[str] = Header(None)):
     """`status` is what the platform asserts, not what the calendar says. An exception
     can read `active` with an expiry date months in the past."""
@@ -868,7 +895,7 @@ def grc_exceptions(status: Optional[str] = None, cursor: Optional[str] = None,
 
 @app.get(GRC + "/treatments")
 def grc_treatments(status: Optional[str] = None, cursor: Optional[str] = None,
-                   limit: int = Query(50, le=500),
+                   limit: int = Query(50, ge=1, le=500),
                    authorization: Optional[str] = Header(None)):
     require_token(authorization)
     sql = """SELECT t.id, t.strategy, t.description, t.target_date, t.completed_on,
@@ -902,7 +929,7 @@ def grc_frameworks(authorization: Optional[str] = Header(None)):
 
 @app.get(GRC + "/requirements")
 def grc_requirements(framework: Optional[str] = None, cursor: Optional[str] = None,
-                     limit: int = Query(200, le=1000),
+                     limit: int = Query(200, ge=1, le=1000),
                      authorization: Optional[str] = Header(None)):
     require_token(authorization)
     sql = """SELECT q.ref, q.title, f.name AS framework, f.version
@@ -919,7 +946,7 @@ def grc_requirements(framework: Optional[str] = None, cursor: Optional[str] = No
 
 
 @app.get(GRC + "/crosswalks")
-def grc_crosswalks(cursor: Optional[str] = None, limit: int = Query(200, le=1000),
+def grc_crosswalks(cursor: Optional[str] = None, limit: int = Query(200, ge=1, le=1000),
                    authorization: Optional[str] = Header(None)):
     """Equivalence between two frameworks' requirements, and it is mostly partial.
     A control failure therefore moves ISO and CSF by different amounts, which is the
@@ -1009,7 +1036,7 @@ def grc_attachment_content(attachment_id: str, token: Optional[str] = None,
 
 @app.get(GRC + "/control-mappings")
 def grc_mappings(framework: Optional[str] = None, cursor: Optional[str] = None,
-                 limit: int = Query(200, le=1000),
+                 limit: int = Query(200, ge=1, le=1000),
                  authorization: Optional[str] = Header(None)):
     require_token(authorization)
     sql = """SELECT c.ref AS control_ref, q.ref AS requirement_ref,

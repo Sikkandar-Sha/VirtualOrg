@@ -522,6 +522,19 @@ def groundtruth_export():
     for r in db.q("SELECT entity_kind, entity_id, external_id FROM lens_visibility"):
         alias.append((r["entity_kind"], r["external_id"], r["entity_id"]))
 
+    # An alias that names more than one entity resolves to none of them. 90 IP
+    # addresses are shared by 228 assets, because the world recycles them on purpose;
+    # silently picking whichever row came last would hand the scorer a wrong entity
+    # and charge the kit a false positive and a false negative for it.
+    seen, ambiguous = {}, set()
+    for k, a, i in alias:
+        if not a:
+            continue
+        key = (k, str(a).strip().lower())
+        if key in seen and seen[key] != i:
+            ambiguous.add(key)
+        seen[key] = i
+
     return {
         "world": {r["key"]: r["value"] for r in db.q("SELECT key, value FROM world_meta")},
         "expectations": [
@@ -531,11 +544,18 @@ def groundtruth_export():
                                FROM expectation ORDER BY id""")],
         # source_ref too: a kit sees an alert id or a finding id, never an evidence id,
         # so it can only ever name the source record it was reasoning about.
+        # `reachable` marks the links whose source record a connector can actually see.
+        # control_test evidence is not reachable: the GRC API exposes only the latest
+        # result per control, never the history, so scoring recall against those would
+        # measure something no kit can possibly do.
         "evidence": [
             {"id": r["id"], "source_ref": r["source_ref"], "kind": r["kind"],
-             "control_id": r["control_id"], "is_trap": r["is_trap"]}
+             "control_id": r["control_id"], "is_trap": r["is_trap"],
+             "reachable": r["kind"] != "control_test"}
             for r in db.q("""SELECT id, source_ref, kind, control_id, is_trap
                                FROM evidence ORDER BY id""")],
-        "aliases": [{"kind": k, "alias": str(a).lower(), "id": i}
-                    for k, a, i in alias if a],
+        "aliases": [{"kind": k, "alias": str(a).strip().lower(), "id": i}
+                    for k, a, i in alias
+                    if a and (k, str(a).strip().lower()) not in ambiguous],
+        "ambiguous_aliases": [{"kind": k, "alias": a} for k, a in sorted(ambiguous)],
     }

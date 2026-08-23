@@ -14,10 +14,13 @@ and none of it came from one.
   random. Email addresses use `acme.example`, a domain reserved by RFC 2606 precisely
   so it can never resolve. Any resemblance to a living person is coincidental and
   unintended.
-- **The CVE identifiers are fabricated.** They are constructed as
-  `CVE-<random year>-<random number>`. They are not real advisories, they do not
-  correspond to real software, and a CVSS score attached to one here says nothing
-  whatsoever about the security of anything. Do not look them up. Do not act on them.
+- **The CVE identifiers are fabricated, and deliberately impossible.** They are
+  constructed with a year in the 9000s, for example `CVE-9024-12176`. CVE years are
+  assignment years, so nothing will ever be issued in that range and an identifier
+  from this world can never name a real advisory. The CVSS score attached to one says
+  nothing whatsoever about the security of anything. This is on purpose: a synthetic
+  finding that escapes into a real report should be recognisable as synthetic on
+  sight, not only by whoever remembers where it came from.
 - **The vulnerabilities, misconfigurations, control failures and incidents are
   fabricated.** They exist to give a risk-posture product something to reason about,
   not because anyone found them anywhere.
@@ -59,8 +62,10 @@ that reason. See [SECURITY.md](SECURITY.md) before changing either.
 ## The twins are models, not the vendors
 
 Every API twin here was written from published documentation and our understanding of
-each vendor's behaviour. **None was captured from a real tenant, and all seven are
-marked `unverified`** in `twins/provenance.yaml`.
+each vendor's behaviour. **None was captured from a real tenant, and all seven are derived as
+`unverified`** from `twins/provenance.yaml`, which records for each twin what its
+shapes were based on and whether anything was ever captured. The status is computed
+from those two facts rather than asserted, and served at `/_provenance`.
 
 A connector that passes against VirtualOrg has been shown to agree with *this
 environment*. It has not been shown to agree with the vendor. Those are different

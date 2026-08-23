@@ -26,6 +26,7 @@ import re
 import sys
 
 import httpx
+from urllib.parse import urlparse
 
 BASE = os.environ.get("VO_BASE", "http://127.0.0.1:8080")
 TOKEN = os.environ.get("VO_TOKEN", "vo-dev-token")
@@ -61,6 +62,17 @@ def page_number(path, **params):
         page += 1
 
 
+def same_origin(url):
+    """The next URL comes from the server, and this client carries a bearer token. An
+    upstream that pointed rel="next" at another host would be handed the credential.
+    A harness is not where that matters, but this file is meant to be copied, and the
+    check costs one line."""
+    if url.startswith("/"):
+        return True
+    u, b = urlparse(url), urlparse(BASE)
+    return (u.scheme, u.netloc) == (b.scheme, b.netloc)
+
+
 def link_header(path, **params):
     """Okta gives you the next URL. Following it is the whole contract."""
     out = []
@@ -68,8 +80,12 @@ def link_header(path, **params):
     r.raise_for_status()
     out += r.json()
     link = r.headers.get("link", "")
-    while 'rel="next"' in link:
+    seen = 0
+    while 'rel="next"' in link and seen < 10_000:
+        seen += 1
         url = [x.split(">")[0].strip().lstrip("<") for x in link.split(",") if 'rel="next"' in x][0]
+        if not same_origin(url):
+            raise RuntimeError(f"rel=next pointed off-origin, refusing to send the token: {url}")
         r = c.get(url)
         r.raise_for_status()
         out += r.json()
@@ -168,7 +184,10 @@ def main():
             attributions.append({"evidence_id": alert["event_id"], "control_id": best})
 
     json.dump({
+        # All five values that identify a world. The scorer refuses anything less,
+        # because scale and chaos change the answer key as surely as the seed does.
         "meta": {"world_seed": int(meta["seed"]), "as_of": meta["as_of"],
+                 "scale": meta["scale"], "chaos": meta["chaos"],
                  "generator_version": meta["generator_version"], "mode": "simulated"},
         "findings": findings,
         "attributions": attributions,

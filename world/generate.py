@@ -463,7 +463,13 @@ def build(g: argparse.Namespace, gen: Gen):
         rem = disc + dt.timedelta(days=r.randint(3, 220)) if r.random() < 0.7 else None
         if rem and rem > today:
             rem = None
-        vulns.append((f"VUL-{i:05d}", a["id"], f"CVE-{r.randint(2022,2026)}-{r.randint(1000,49999)}",
+        # The year is deliberately impossible. CVE years are assignment years, so
+        # nothing will ever be issued in the 9000s, and an identifier from this world
+        # can therefore never be mistaken for a real advisory or looked up and acted
+        # on. The draw is still randint(2022, 2026) so that the random stream, and
+        # therefore every downstream value in the world, is unchanged.
+        vulns.append((f"VUL-{i:05d}", a["id"],
+                      f"CVE-{r.randint(2022, 2026) + 7000}-{r.randint(1000,49999)}",
                       round(r.uniform(3.1, 9.9), 1), disc, rem))
     gen.put("vulnerability", vulns)
 
@@ -487,7 +493,12 @@ def build(g: argparse.Namespace, gen: Gen):
         evid.append((f"EVD-{n_ev:06d}", "finding", f["id"], f["control"], 0.9,
                      dt.datetime.combine(f["raised"], dt.time(9, 0), tzinfo=dt.timezone.utc), False))
     # a sample of alerts is genuine evidence for a control sharing the rule's theme;
-    # a slice is a TRAP: topically adjacent, but not evidence for that control
+    # A slice is a TRAP: the event is linked to a control it does not evidence.
+    # The decoy is drawn from the whole control library rather than from the rule's
+    # own theme, so it is not reliably topically adjacent. What it measures is
+    # whether a system will assert a link it cannot support, which is the failure
+    # that matters. Making decoys same-theme would make them more tempting but
+    # also unlearnable, since the world models no signal that would separate them.
     sample = r.sample(alerts, min(len(alerts), int(4000 * gen.scale)))
     for al in sample:
         tag = rule_tag[al[1]]
@@ -554,8 +565,9 @@ def build(g: argparse.Namespace, gen: Gen):
     if chaos == 0:
         # Everything names things the same way and nothing is stale or missing.
         # Correlation becomes trivial, which is the point: baseline regression.
+        # People-facing lenses share one scheme, asset-facing lenses share another.
         lenses = [(lid, v, cat, 1.00, 0,
-                   "username" if cat == "iam" else "fqdn", 36500,
+                   "username" if cat in ("iam", "hcm") else "fqdn", 36500,
                    "nothing, chaos level 0 is the pristine baseline")
                   for lid, v, cat, _c, _l, _st, _r, _b in base_lenses]
     else:
@@ -575,9 +587,12 @@ def build(g: argparse.Namespace, gen: Gen):
     for lid, _, cat, cov, lat, style, _ret, _bs in lenses:
         if cat == "hcm":
             for i, p in enumerate(people, 1):
-                if p["employment"] == "contractor":
+                if chaos and p["employment"] == "contractor":
                     continue                      # the blind spot, applied
-                vis.append((lid, "person", p["id"], f"WD-{100000 + i}",
+                # At chaos 0 HR names people the same way the IdP does, so the join
+                # is free. That is what "one identifier scheme" has to mean.
+                ext = p["email"].split("@")[0] if chaos == 0 else f"WD-{100000 + i}"
+                vis.append((lid, "person", p["id"], ext,
                             dt.datetime.combine(today, dt.time(6, 0), tzinfo=dt.timezone.utc)))
             continue
         if cat == "edr":
@@ -588,7 +603,10 @@ def build(g: argparse.Namespace, gen: Gen):
                     continue
                 silent = r.random() < 0.12
                 age = r.randint(9, 40) * 24 if silent else r.randint(0, 3)
-                vis.append((lid, "asset", a["id"], agent_id(a),
+                if chaos == 0:            # draws already taken, results overridden
+                    silent, age = False, 0
+                vis.append((lid, "asset", a["id"],
+                            ident[style](a) if chaos == 0 else agent_id(a),
                             dt.datetime.combine(today, dt.time(8, 0), tzinfo=dt.timezone.utc)
                             - dt.timedelta(hours=age)))
                 if silent:
@@ -607,6 +625,8 @@ def build(g: argparse.Namespace, gen: Gen):
         seen_assets = [a for a in assets if r.random() < cov]
         for a in seen_assets:
             stale_h = r.randint(0, 24) if lid != "servicenow" else r.randint(0, 72)
+            if chaos == 0:
+                stale_h = 0
             vis.append((lid, "asset", a["id"], ident[style](a),
                         dt.datetime.combine(today, dt.time(8, 0), tzinfo=dt.timezone.utc)
                         - dt.timedelta(hours=stale_h)))
@@ -746,7 +766,7 @@ def build(g: argparse.Namespace, gen: Gen):
     for e in evid:
         if e[6]:
             add("attribution", "evidence", e[0],
-                "evidence is topically adjacent to the control but is not evidence for it",
+                "evidence is linked to a control it does not evidence",
                 {"control_id": e[3], "source": e[2]})
 
 
@@ -891,7 +911,7 @@ def build(g: argparse.Namespace, gen: Gen):
         ("seed", str(g.seed)), ("as_of", today.isoformat()),
         ("history_start", start.isoformat()), ("scale", str(gen.scale)),
         ("chaos", str(chaos)), ("mangled_identifiers", str(mangled)),
-        ("generator_version", "2"),
+        ("generator_version", "3"),
     ])
 
 # --------------------------------------------------------------------------- load

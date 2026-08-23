@@ -100,9 +100,23 @@ def splunk(search):
 print("VirtualOrg verification\n")
 h = c.get("/healthz").json()
 print(f"  world seed={h['world']['seed']} as_of={h['world']['as_of']} "
-      f"history_start={h['world']['history_start']}\n")
+      f"history_start={h['world']['history_start']} chaos={h['world'].get('chaos')}\n")
 
 PROFILES = list(SNOW_PROFILES)
+
+# Several checks assert the loss profile, which the chaos dial deliberately removes.
+# Running them against a chaos 0 world would report failures for a world that is
+# behaving exactly as designed.
+CHAOS = int(h["world"].get("chaos", 1))
+LOSSY = CHAOS > 0
+
+
+def lossy(name, ok, detail=""):
+    """A check that only holds where loss is applied."""
+    if not LOSSY:
+        print(f"  SKIP  {name}  , not applicable at chaos 0")
+        return
+    check(name, ok, detail)
 alerts = splunk("search index=main")
 splunk_hosts = {a["host"] for a in alerts}
 grc_assets = pages("/grc/api/v1/assets")
@@ -122,22 +136,22 @@ snow_ids = snow_by_profile["out-of-the-box"]
 check("all three profiles describe the same assets under different field names",
       len(set(map(frozenset, snow_by_profile.values()))) == 1,
       f"{len(PROFILES)} profiles, identical id sets")
-check("ServiceNow and Splunk share no asset identifier",
+lossy("ServiceNow and Splunk share no asset identifier",
       len(snow_ids & splunk_hosts) == 0,
       f"{len(snow_ids)} fqdn vs {len(splunk_hosts)} ip, overlap {len(snow_ids & splunk_hosts)}")
-check("Splunk identifies assets by IP",
+lossy("Splunk identifies assets by IP",
       all(i.count(".") == 3 and i.split(".")[0].isdigit() for i in list(splunk_hosts)[:20]))
-check("GRC identifies assets by asset tag",
+lossy("GRC identifies assets by asset tag",
       all(i.startswith("AT-") for i in list(grc_tags)[:20]), f"{len(grc_tags)} assets")
 scan_hosts = {a["hostname"] for a in c.get("/scanner/api/v3/assets",
                                             params={"limit": 5000}).json()["assets"]}
-check("Scanner identifies assets by hostname",
+lossy("Scanner identifies assets by hostname",
       all("." not in h and "-" in h for h in list(scan_hosts)[:20]),
       f"{len(scan_hosts)} assets, e.g. {sorted(scan_hosts)[0]}")
 import itertools
 styles = {"fqdn": snow_ids, "ip": splunk_hosts, "asset_tag": grc_tags, "hostname": scan_hosts}
 clashes = [f"{a}/{b}" for (a, x), (b, y) in itertools.combinations(styles.items(), 2) if x & y]
-check("no identifier is shared by ANY pair of asset lenses", not clashes,
+lossy("no identifier is shared by ANY pair of asset lenses", not clashes,
       " / ".join(styles) + " are mutually disjoint")
 
 # ---- 2. the profiles genuinely diverge (the deployability bar, DESIGN.md #5)
@@ -155,9 +169,9 @@ check("severity vocabularies diverge across profiles",
 # ---- 3. coverage gap (absence)
 print("\nAbsence")
 lens = c.get("/_lens/splunk").json()
-check("Splunk reports partial coverage", lens["coverage"] < 1.0,
+lossy("Splunk reports partial coverage", lens["coverage"] < 1.0,
       f"coverage={lens['coverage']}, blind spot: {lens['blind_spot']}")
-check("assets exist in ITSM that Splunk never reports",
+lossy("assets exist in ITSM that Splunk never reports",
       len(snow_ids) > len(splunk_hosts),
       f"{len(snow_ids)} in CMDB, {len(splunk_hosts)} distinct hosts in SIEM")
 controls = pages("/grc/api/v1/controls")
@@ -278,7 +292,7 @@ snow_owner_names = {r[ownf] for r in snow("cmdb_ci_computer") if r.get(ownf)}
 assert snow_owner_names, "owner names came back empty, the check below would be vacuous"
 iam_logins = {u["profile"]["login"] for u in c.get(
     "/iam/api/v1/users", params={"limit": 1000}).json()}
-check("the IdP names people by login, not by the name other lenses show",
+lossy("the IdP names people by login, not by the name other lenses show",
       not (snow_owner_names & iam_logins),
       f"{len(snow_owner_names)} owner names vs {len(iam_logins)} logins, zero overlap")
 
@@ -290,11 +304,35 @@ times = [f["last_found"] for f in first["findings"]]
 check("findings are ordered by last_found, so `since` is safe to checkpoint",
       times == sorted(times), "monotonic non-decreasing")
 second = c.get("/scanner/api/v3/findings",
-               params={"limit": 200, "since": first["next_since"]}).json()
+               params={"limit": 200, "since": first["next_since"],
+                       "since_id": first["next_since_id"]}).json()
 overlap = ({f["finding_id"] for f in first["findings"]} &
            {f["finding_id"] for f in second["findings"]})
-check("polling with next_since returns no duplicates", not overlap,
+check("polling with the full checkpoint returns no duplicates", not overlap,
       f"page 2 has {len(second['findings'])} findings, {len(overlap)} repeats")
+
+# The invariant that actually matters, and the one the old check missed: walking the
+# feed page by page must not lose a record. Many findings share a timestamp, so a
+# checkpoint on the timestamp alone silently drops every row at a page boundary.
+_all = {f["finding_id"] for f in
+        c.get("/scanner/api/v3/findings", params={"limit": 5000}).json()["findings"]}
+_seen, _since, _sid, _pages = set(), None, None, 0
+while _pages < 200:
+    _pages += 1
+    _p = {"limit": 25}
+    if _since:
+        _p["since"], _p["since_id"] = _since, _sid
+    _r = c.get("/scanner/api/v3/findings", params=_p).json()
+    if not _r["findings"]:
+        break
+    _seen |= {f["finding_id"] for f in _r["findings"]}
+    _since, _sid = _r["next_since"], _r["next_since_id"]
+    if not _r["has_more"]:
+        break
+check("a paged walk of the scanner feed loses nothing",
+      _seen == _all,
+      f"{len(_seen)} of {len(_all)} findings across {_pages} pages, "
+      f"{len(_all - _seen)} dropped")
 backdated = [f for f in second["findings"]
              if f["first_found"] < min(x["first_found"] for x in first["findings"])]
 check("late-arriving records carry an older first_found than the checkpoint",
@@ -320,7 +358,7 @@ def hr_pages(**kw):
 workers, hr_total = hr_pages()
 check("HR paginates by page number and reports total_pages",
       len(workers) == hr_total, f"{len(workers)} workers across the declared pages")
-check("HR is structurally blind to contractors",
+lossy("HR is structurally blind to contractors",
       all(w["worker_type"] == "Employee" for w in workers) and hr_total < 500,
       f"{hr_total} of 500 people, the rest are engaged through vendor management")
 leavers = [w for w in workers if w["termination_date"]]
@@ -349,9 +387,9 @@ check("unknown ids are absent from the response, not an error",
       len(ghost["resources"]) == 2, "a bulk endpoint drops what it cannot find")
 allh = c.post("/edr/devices/entities/devices/v2", json={"ids": ids}).json()["resources"]
 silent = [d for d in allh if d["status"] == "silent"]
-check("agent staleness is a property of the data, not an injected failure",
+lossy("agent staleness is a property of the data, not an injected failure",
       len(silent) > 0, f"{len(silent)} agents installed but silent for 7+ days")
-check("EDR names devices by agent id, and carries the short hostname too",
+lossy("EDR names devices by agent id, and carries the short hostname too",
       all("-" in d["device_id"] and len(d["device_id"]) == 36 for d in allh[:20])
       and all("." not in d["hostname"] for d in allh[:20]),
       "the one join that works without inference")
@@ -374,7 +412,7 @@ check("joining HR to the IdP surfaces orphaned access",
       f"{len(joined)} accounts ACTIVE in the IdP whose worker is terminated in HR")
 hr_ids = {w["employee_id"] for w in workers}
 idp_logins = {u["profile"]["login"] for u in idp}
-check("HR and the IdP share no identifier for the same person",
+lossy("HR and the IdP share no identifier for the same person",
       not (hr_ids & idp_logins),
       f"employee_id vs login, {len(hr_ids)} vs {len(idp_logins)}, zero overlap")
 
@@ -599,11 +637,11 @@ check("control mappings carry partial coverage, not booleans",
 # ---- 6. loss profile is actually applied
 print("\nLoss profile")
 newest = max(a["_time"] for a in alerts)
-check("Splunk cannot see past its sync latency",
+lossy("Splunk cannot see past its sync latency",
       newest <= lens["visible_now_until"], f"newest={newest} horizon={lens['visible_now_until']}")
 oldest = min(a["_time"] for a in alerts)
 cutoff = (dt.datetime.fromisoformat(h["world"]["as_of"]) - dt.timedelta(days=lens["retention_days"]))
-check("Splunk retains only its retention window",
+lossy("Splunk retains only its retention window",
       dt.datetime.fromisoformat(oldest).replace(tzinfo=None) >= cutoff - dt.timedelta(days=1),
       f"oldest={oldest[:10]}, retention={lens['retention_days']}d")
 

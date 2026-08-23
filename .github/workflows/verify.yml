@@ -60,10 +60,15 @@ jobs:
           # The Control Center is unauthenticated by design, so it must never render
           # a token, not even the shipped default. Examples reference $VO_TOKEN.
           fail=0
-          for u in / /asset /spine /lenses /lenses/grc /org /groundtruth /scenario \
-                   "/manual?ch=overview" "/manual?ch=connect" "/manual?ch=api" \
-                   "/manual?ch=model" "/manual?ch=reach" "/manual?ch=gaps" \
-                   "/manual?ch=correlate" "/manual?ch=scoring"; do
+          pages="/ /asset /spine /org /groundtruth /scenario /lenses /export/groundtruth"
+          for l in servicenow splunk grc iam scanner hr edr; do pages="$pages /lenses/$l"; done
+          for ch in overview model reach gaps connect api correlate scoring; do
+            pages="$pages /manual?ch=$ch"
+          done
+          # parameterised detail pages, which the old list skipped entirely
+          pages="$pages /asset/AST-0001 /spine/service/SVC-01 /spine/control/CTL-017"
+          pages="$pages /org/person/EMP-0001 /org?tab=people /org?tab=controls"
+          for u in $pages; do
             if curl -s "localhost:3000$u" | grep -q "vo-dev-token"; then
               echo "FAIL $u renders a literal token"; fail=1
             fi
@@ -147,15 +152,35 @@ jobs:
 
       - name: The world is deterministic
         run: |
-          docker compose up -d --force-recreate twin-gateway
-          a=$(docker compose exec -T world-db psql -U vo -d world -tAc \
-              "SELECT md5(string_agg(id,',' ORDER BY id)) FROM world.expectation")
+          # Hash the CONTENT of the tables that carry the world, not just their ids.
+          # The previous version hashed expectation.id, which is sequential and
+          # therefore a pure function of the row count: it could not have detected
+          # non-determinism in any actual data.
+          fingerprint() {
+            docker compose exec -T world-db psql -U vo -d world -tAc "
+              SELECT md5(string_agg(h, '' ORDER BY h)) FROM (
+                SELECT md5(p::text) AS h FROM world.person p
+                UNION ALL SELECT md5(a::text) FROM world.asset a
+                UNION ALL SELECT md5(e::text) FROM world.evidence e
+                UNION ALL SELECT md5(x::text) FROM world.expectation x
+                UNION ALL SELECT md5(v::text) FROM world.vulnerability v
+                UNION ALL SELECT md5(l::text) FROM world.lens_visibility l
+                UNION ALL SELECT md5(c::text) FROM world.control_exception c
+              ) t"
+          }
+          a=$(fingerprint)
           docker compose up -d --force-recreate world-engine
-          sleep 8
-          b=$(docker compose exec -T world-db psql -U vo -d world -tAc \
-              "SELECT md5(string_agg(id,',' ORDER BY id)) FROM world.expectation")
-          echo "before=$a after=$b"
-          [ "$a" = "$b" ]
+          sleep 10
+          b=$(fingerprint)
+          echo "before=$a"
+          echo "after =$b"
+          if [ "$a" != "$b" ]; then
+            echo "The same seed produced a different world. Determinism is broken."
+            exit 1
+          fi
+          echo "identical across a full regeneration"
+          docker compose up -d --force-recreate twin-gateway
+          for i in $(seq 1 30); do curl -sf localhost:8080/healthz >/dev/null 2>&1 && break; sleep 2; done
 
       - name: Logs on failure
         if: failure()

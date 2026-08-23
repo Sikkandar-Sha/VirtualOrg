@@ -12,7 +12,7 @@ The input contract is deliberately small. Anything richer becomes a schema peopl
 argue with instead of a benchmark they run.
 
     {
-      "meta": {"world_seed": 48392, "as_of": "2026-08-21", "generator_version": "2"},
+      "meta": {"world_seed": 48392, "as_of": "2026-08-21", "generator_version": "3"},
       "findings":     [{"family": "conflict", "subject_kind": "control", "subject_id": "CTL-017"}],
       "attributions": [{"evidence_id": "EVD-000123", "control_id": "CTL-045"}]
     }
@@ -79,19 +79,27 @@ def load_truth(gt):
     # `ALR-000123` from Splunk and has no way to know the evidence row is `EVD-000456`
     ev = {}
     for r in gt["evidence"]:
-        ev[r["id"]] = (r["control_id"], r["is_trap"])
+        row = (r["control_id"], r["is_trap"], r.get("reachable", True))
+        ev[r["id"]] = row
         if r.get("source_ref"):
-            ev.setdefault(r["source_ref"], (r["control_id"], r["is_trap"]))
+            ev.setdefault(r["source_ref"], row)
     return truth, claims, ev
 
 
 def check_world(meta, live):
     """Refuse to score against a different world. A number produced from world A and
     compared to the answer key for world B is worse than no number at all."""
-    want = {"world_seed": "seed", "as_of": "as_of", "generator_version": "generator_version"}
+    # All five, because scale and chaos change the world as surely as the seed does.
+    want = {"world_seed": "seed", "as_of": "as_of", "scale": "scale",
+            "chaos": "chaos", "generator_version": "generator_version"}
     bad = []
+    if not meta:
+        return ["the posture carries no `meta` block, so there is no way to tell which "
+                "world produced it"]
     for given, key in want.items():
-        if given in meta and str(meta[given]) != str(live.get(key)):
+        if given not in meta:
+            bad.append(f"`meta.{given}` is missing; the loaded world has {key}={live.get(key)}")
+        elif str(meta[given]) != str(live.get(key)):
             bad.append(f"{given}={meta[given]} but the loaded world has {key}={live.get(key)}")
     return bad
 
@@ -146,16 +154,26 @@ def main():
                      "precision": pct(tp, tp + fp), "recall": pct(tp, tp + fn)})
 
     # ---- attribution
-    att = posture.get("attributions", [])
+    # Deduplicated: naming the same evidence twice is one claim, not two, and without
+    # this `missed` can go negative and recall can exceed 1.0.
+    att, seen_ev = [], set()
+    for x in posture.get("attributions", []):
+        k = (x.get("evidence_id"), x.get("control_id"))
+        if k not in seen_ev:
+            seen_ev.add(k)
+            att.append(x)
+    duplicates = len(posture.get("attributions", [])) - len(att)
     a_tp = a_fp = 0
     traps_taken, unknown = [], 0
+    scored_ev = set()
     for x in att:
         eid, cid = x.get("evidence_id"), x.get("control_id")
         if eid not in evidence:
             unknown += 1
             continue
-        true_cid, is_trap = evidence[eid]
+        true_cid, is_trap, _ = evidence[eid]
         cid = resolve(alias, "control", cid)   # a kit emits C-011, not CTL-011
+        scored_ev.add(eid)
         if is_trap:
             traps_taken.append((eid, cid, true_cid))
             a_fp += 1
@@ -165,8 +183,9 @@ def main():
             a_fp += 1
     # counted from the rows, not from `evidence`, which holds two keys per row
     a_total = sum(1 for r in gt["evidence"] if not r["is_trap"])
+    a_reach = sum(1 for r in gt["evidence"] if not r["is_trap"] and r.get("reachable", True))
     n_traps = sum(1 for r in gt["evidence"] if r["is_trap"])
-    a_fn = a_total - a_tp
+    a_fn = max(0, a_reach - a_tp)
 
     result = {
         "world": live,
@@ -174,12 +193,16 @@ def main():
                      "precision": pct(totals["tp"], totals["tp"] + totals["fp"]),
                      "recall": pct(totals["tp"], totals["tp"] + totals["fn"]), **totals},
         "unresolved_subjects": unresolved,
-        "attribution": {"claimed": len(att), "correct": a_tp, "wrong": a_fp,
-                        "missed": a_fn, "true_links": a_total,
+        "attribution": {"claimed": len(att), "duplicates_ignored": duplicates,
+                        "correct": a_tp, "wrong": a_fp, "missed": a_fn,
+                        "true_links": a_total, "reachable_links": a_reach,
                         "traps_total": n_traps, "traps_taken": len(traps_taken),
                         "unknown_evidence_ids": unknown,
-                        "precision": pct(a_tp, a_tp + a_fp), "recall": pct(a_tp, a_total)},
+                        "precision": pct(a_tp, a_tp + a_fp),
+                        "recall": pct(a_tp, a_reach)},
     }
+    result["world_mismatch"] = mismatch
+    result["forced"] = bool(mismatch and a.force)
     if a.json:
         print(json.dumps(result, indent=2))
         return 0
@@ -201,9 +224,14 @@ def main():
 
     at = result["attribution"]
     print(f"\nAttribution")
-    print(f"  {at['claimed']:,} attributions claimed against {at['true_links']:,} true links")
+    print(f"  {at['claimed']:,} attributions claimed")
     print(f"  correct {at['correct']:,}   wrong {at['wrong']:,}   missed {at['missed']:,}")
     print(f"  precision {fmt(at['precision'])}   recall {fmt(at['recall'])}")
+    print(f"  recall is against the {at['reachable_links']:,} true links whose source record")
+    print(f"  a connector can actually see. The world holds {at['true_links']:,} in total; the")
+    print(f"  difference is control-test history, which the GRC API never exposes.")
+    if at["duplicates_ignored"]:
+        print(f"  {at['duplicates_ignored']:,} duplicate attributions ignored")
     print(f"  traps taken {at['traps_taken']} of {at['traps_total']}")
     if at["unknown_evidence_ids"]:
         print(f"  {at['unknown_evidence_ids']:,} attributions name a source record with no")
@@ -221,8 +249,9 @@ def main():
         print("  These events are topically adjacent to the control they were attributed")
         print("  to, and are not evidence for it. Falling for one is the failure mode this")
         print("  environment exists to measure.")
-        for eid, said, actual in traps_taken[:a.traps]:
-            print(f"    {eid}  attributed to {said}, true attribution {actual}")
+        for eid, said, decoy in traps_taken[:a.traps]:
+            print(f"    {eid}  attributed to {said}; this event evidences no control, "
+                  f"and {decoy} is the decoy it was planted against")
 
     missing = [(k, claims[k]) for k in truth if k not in claimed]
     if missing:
