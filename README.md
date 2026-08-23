@@ -1,6 +1,6 @@
 <h1>VirtualOrg</h1>
 
-**A synthetic enterprise for testing risk-posture products, with the answer key
+**A synthetic enterprise for testing products, with the answer key
 included.**
 
 [![licence](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
