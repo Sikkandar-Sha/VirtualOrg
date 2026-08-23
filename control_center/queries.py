@@ -488,3 +488,54 @@ def control_policies(control_id):
 def control_exceptions(control_id):
     return db.q("""SELECT id, reason, approved_on, expires_on, status
                      FROM control_exception WHERE control_id = %s ORDER BY id""", (control_id,))
+
+
+
+# ------------------------------------------------- the scoring export (surface 5)
+def groundtruth_export():
+    """Everything a scorer needs, and nothing a kit should ever see.
+
+    This lives on the Control Center rather than the twin on purpose. The twins are
+    what the kit under test talks to, and the answer key must not be reachable from
+    there at any price. The Control Center is the harness side of the boundary.
+    """
+    alias = []
+    for r in db.q("SELECT id, ref FROM control"):
+        alias += [("control", r["id"], r["id"]), ("control", r["ref"], r["id"])]
+    for r in db.q("SELECT id, ref FROM risk"):
+        alias += [("risk", r["id"], r["id"]), ("risk", r["ref"], r["id"])]
+    for r in db.q("SELECT id, ref FROM policy"):
+        alias += [("policy", r["id"], r["id"]), ("policy", r["ref"], r["id"])]
+    for r in db.q("SELECT id, ref FROM incident"):
+        alias += [("incident", r["id"], r["id"]), ("incident", r["ref"], r["id"])]
+    for r in db.q("SELECT id, hostname, fqdn, asset_tag, host(ip) AS ip FROM asset"):
+        alias += [("asset", v, r["id"]) for v in
+                  (r["id"], r["hostname"], r["fqdn"], r["asset_tag"], r["ip"])]
+    for r in db.q("SELECT id, email FROM person"):
+        alias += [("person", r["id"], r["id"]), ("person", r["email"], r["id"]),
+                  ("person", r["email"].split("@")[0], r["id"])]
+    for r in db.q("SELECT id, name FROM application"):
+        alias += [("application", r["id"], r["id"]), ("application", r["name"], r["id"])]
+    for r in db.q("SELECT id, name FROM business_service"):
+        alias += [("business_service", r["id"], r["id"]),
+                  ("business_service", r["name"], r["id"])]
+    for r in db.q("SELECT entity_kind, entity_id, external_id FROM lens_visibility"):
+        alias.append((r["entity_kind"], r["external_id"], r["entity_id"]))
+
+    return {
+        "world": {r["key"]: r["value"] for r in db.q("SELECT key, value FROM world_meta")},
+        "expectations": [
+            {"id": r["id"], "family": r["family"], "subject_kind": r["subject_kind"],
+             "subject_id": r["subject_id"], "claim": r["claim"]}
+            for r in db.q("""SELECT id, family, subject_kind, subject_id, claim
+                               FROM expectation ORDER BY id""")],
+        # source_ref too: a kit sees an alert id or a finding id, never an evidence id,
+        # so it can only ever name the source record it was reasoning about.
+        "evidence": [
+            {"id": r["id"], "source_ref": r["source_ref"], "kind": r["kind"],
+             "control_id": r["control_id"], "is_trap": r["is_trap"]}
+            for r in db.q("""SELECT id, source_ref, kind, control_id, is_trap
+                               FROM evidence ORDER BY id""")],
+        "aliases": [{"kind": k, "alias": str(a).lower(), "id": i}
+                    for k, a, i in alias if a],
+    }

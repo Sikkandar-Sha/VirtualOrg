@@ -78,11 +78,13 @@ def page(request, template, **ctx):
                                "v": asset_version(), **ctx})
 
 
-def hours_stale(last_seen, now):
-    """Whole hours. A tenth of an hour is precision the source never had."""
+def stale_for(last_seen, now):
+    """Whole hours, or days once that stops being readable. A silent EDR agent is
+    865h old, which tells you nothing; 36d tells you it stopped over a month ago."""
     if not last_seen:
         return None
-    return int(round((now - last_seen).total_seconds() / 3600))
+    hours = int(round((now - last_seen).total_seconds() / 3600))
+    return f"{hours}h" if hours < 72 else f"{hours // 24}d"
 
 
 # ------------------------------------------------------------- surface 0: status
@@ -113,7 +115,7 @@ def asset_detail(request: Request, asset_id: str):
     now, _ = world_now()
     bands = []
     for r in Q.asset_lens_rows(asset_id):
-        bands.append({**r, "stale_h": hours_stale(r["last_seen"], now),
+        bands.append({**r, "stale": stale_for(r["last_seen"], now),
                       "blind": r["external_id"] is None})
     return page(request, "asset.html", a=a, bands=bands, now=now,
                 alerts=Q.asset_alert_count(asset_id), vulns=Q.asset_open_vulns(asset_id),
@@ -468,6 +470,13 @@ def manual(request: Request, ch: str = "overview"):
         ctx.update(families=Q.expectation_families(), corpus=Q.attribution_corpus())
 
     return page(request, "manual.html", **ctx)
+
+
+@app.get("/export/groundtruth")
+def export_groundtruth():
+    """The answer key, for scripts/score. Deliberately on the Control Center and not
+    on the twin: the kit under test must never be able to read this."""
+    return Q.groundtruth_export()
 
 
 @app.get("/healthz")

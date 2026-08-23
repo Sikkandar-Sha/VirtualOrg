@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""
+Score a kit's output against VirtualOrg's ground truth.
+
+VirtualOrg knows what should have been concluded. This reads what your product
+concluded and says how close it got: precision and recall per assertion family,
+and, for attribution, exactly which of the deliberate traps it fell for.
+
+    ./scripts/score posture.json
+
+The input contract is deliberately small. Anything richer becomes a schema people
+argue with instead of a benchmark they run.
+
+    {
+      "meta": {"world_seed": 48392, "as_of": "2026-08-21", "generator_version": "2"},
+      "findings":     [{"family": "conflict", "subject_kind": "control", "subject_id": "CTL-017"}],
+      "attributions": [{"evidence_id": "EVD-000123", "control_id": "CTL-045"}]
+    }
+
+Findings match on the (family, subject_kind, subject_id) triple, never on claim
+text: scoring English would make this a string-matching exercise rather than a
+measure of whether the right thing was found.
+"""
+import argparse
+import json
+import os
+import sys
+
+import httpx
+
+# The answer key comes from the Control Center, never from the twins: a kit that
+# could fetch its own marking scheme would not be measuring anything. It also means
+# this runs against a remote VirtualOrg with nothing installed but httpx.
+CC = os.environ.get("VO_CC_BASE", "http://127.0.0.1:3000")
+
+
+def pct(n, d):
+    return 0.0 if not d else n / d
+
+
+def fmt(x):
+    return f"{x:.3f}"
+
+
+def fetch(url):
+    try:
+        r = httpx.get(f"{url}/export/groundtruth", timeout=120)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print(f"Cannot read ground truth from {url}: {type(e).__name__}: {e}", file=sys.stderr)
+        print("Is the Control Center running? Set VO_CC_BASE if it is not on :3000.",
+              file=sys.stderr)
+        sys.exit(2)
+
+
+def load_aliases(gt):
+    """Map every identifier a kit could have seen to the canonical world id.
+
+    A kit never sees `CTL-017`; it sees `C-017` from the GRC API, or
+    `lt-4069.corp.local` from the CMDB, or an agent uuid from the EDR. Resolving those
+    back is the same entity-resolution problem the kit itself had to solve, so the
+    scorer does it rather than demanding ids the kit has no way to know.
+    """
+    return {(a["kind"], a["alias"]): a["id"] for a in gt["aliases"]}
+
+
+def resolve(alias, kind, value):
+    return alias.get((kind, str(value).strip().lower()), value)
+
+
+def load_truth(gt):
+    truth, claims = {}, {}
+    for r in gt["expectations"]:
+        key = (r["family"], r["subject_kind"], r["subject_id"])
+        truth.setdefault(key, []).append(r["id"])
+        claims[key] = r["claim"]
+    # keyed by evidence id AND by the source record it came from, because a kit sees
+    # `ALR-000123` from Splunk and has no way to know the evidence row is `EVD-000456`
+    ev = {}
+    for r in gt["evidence"]:
+        ev[r["id"]] = (r["control_id"], r["is_trap"])
+        if r.get("source_ref"):
+            ev.setdefault(r["source_ref"], (r["control_id"], r["is_trap"]))
+    return truth, claims, ev
+
+
+def check_world(meta, live):
+    """Refuse to score against a different world. A number produced from world A and
+    compared to the answer key for world B is worse than no number at all."""
+    want = {"world_seed": "seed", "as_of": "as_of", "generator_version": "generator_version"}
+    bad = []
+    for given, key in want.items():
+        if given in meta and str(meta[given]) != str(live.get(key)):
+            bad.append(f"{given}={meta[given]} but the loaded world has {key}={live.get(key)}")
+    return bad
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Score a posture against VirtualOrg ground truth")
+    ap.add_argument("posture", help="JSON file produced by the kit under test")
+    ap.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    ap.add_argument("--traps", type=int, default=10, help="how many traps to list (default 10)")
+    ap.add_argument("--force", action="store_true",
+                    help="score even if the world does not match (do not do this)")
+    a = ap.parse_args()
+
+    posture = json.load(open(a.posture))
+    gt = fetch(CC)
+    live = gt["world"]
+    mismatch = check_world(posture.get("meta", {}), live)
+    if mismatch and not a.force:
+        print("This posture was not produced from the loaded world:", file=sys.stderr)
+        for m in mismatch:
+            print(f"  {m}", file=sys.stderr)
+        print("\nScoring it would compare answers to the wrong answer key. "
+              "Regenerate, or pass --force if you truly mean to.", file=sys.stderr)
+        return 2
+
+    truth, claims, evidence = load_truth(gt)
+
+    # ---- findings
+    alias = load_aliases(gt)
+    claimed, unresolved = set(), []
+    for f in posture.get("findings", []):
+        kind, raw = f.get("subject_kind"), f.get("subject_id")
+        canon = resolve(alias, kind, raw)
+        if canon == raw and (kind, str(raw).strip().lower()) not in alias:
+            unresolved.append(f"{kind}/{raw}")
+        claimed.add((f.get("family"), kind, canon))
+    # `attribution` expectations describe the traps, and are scored properly in the
+    # Attribution section below. Counting them here as well would double-count and
+    # depress recall for a reason that is not the kit's doing.
+    SCORED_AS_FINDINGS = {"absence", "conflict", "degradation"}
+    truth = {k: v for k, v in truth.items() if k[0] in SCORED_AS_FINDINGS}
+    claimed = {k for k in claimed if k[0] in SCORED_AS_FINDINGS}
+    fams = sorted({k[0] for k in truth} | {k[0] for k in claimed if k[0]})
+    rows, totals = [], {"tp": 0, "fp": 0, "fn": 0}
+    for fam in fams:
+        t = {k for k in truth if k[0] == fam}
+        c = {k for k in claimed if k[0] == fam}
+        tp, fp, fn = len(t & c), len(c - t), len(t - c)
+        totals["tp"] += tp; totals["fp"] += fp; totals["fn"] += fn
+        rows.append({"family": fam, "expected": len(t), "claimed": len(c),
+                     "correct": tp, "spurious": fp, "missed": fn,
+                     "precision": pct(tp, tp + fp), "recall": pct(tp, tp + fn)})
+
+    # ---- attribution
+    att = posture.get("attributions", [])
+    a_tp = a_fp = 0
+    traps_taken, unknown = [], 0
+    for x in att:
+        eid, cid = x.get("evidence_id"), x.get("control_id")
+        if eid not in evidence:
+            unknown += 1
+            continue
+        true_cid, is_trap = evidence[eid]
+        cid = resolve(alias, "control", cid)   # a kit emits C-011, not CTL-011
+        if is_trap:
+            traps_taken.append((eid, cid, true_cid))
+            a_fp += 1
+        elif cid == true_cid:
+            a_tp += 1
+        else:
+            a_fp += 1
+    # counted from the rows, not from `evidence`, which holds two keys per row
+    a_total = sum(1 for r in gt["evidence"] if not r["is_trap"])
+    n_traps = sum(1 for r in gt["evidence"] if r["is_trap"])
+    a_fn = a_total - a_tp
+
+    result = {
+        "world": live,
+        "findings": {"by_family": rows,
+                     "precision": pct(totals["tp"], totals["tp"] + totals["fp"]),
+                     "recall": pct(totals["tp"], totals["tp"] + totals["fn"]), **totals},
+        "unresolved_subjects": unresolved,
+        "attribution": {"claimed": len(att), "correct": a_tp, "wrong": a_fp,
+                        "missed": a_fn, "true_links": a_total,
+                        "traps_total": n_traps, "traps_taken": len(traps_taken),
+                        "unknown_evidence_ids": unknown,
+                        "precision": pct(a_tp, a_tp + a_fp), "recall": pct(a_tp, a_total)},
+    }
+    if a.json:
+        print(json.dumps(result, indent=2))
+        return 0
+
+    print("VirtualOrg score\n")
+    print(f"  world  seed={live.get('seed')} as_of={live.get('as_of')} "
+          f"chaos={live.get('chaos')} generator_version={live.get('generator_version')}")
+    if mismatch:
+        print("  WARNING: forced past a world mismatch; these numbers mean nothing")
+    print("\nFindings   (attribution is scored separately, below)")
+    print(f"  {'family':<13}{'expected':>9}{'claimed':>9}{'correct':>9}"
+          f"{'missed':>8}{'spurious':>10}{'precision':>11}{'recall':>9}")
+    for r in rows:
+        print(f"  {r['family']:<13}{r['expected']:>9}{r['claimed']:>9}{r['correct']:>9}"
+              f"{r['missed']:>8}{r['spurious']:>10}{fmt(r['precision']):>11}{fmt(r['recall']):>9}")
+    f = result["findings"]
+    print(f"  {'all':<13}{f['tp'] + f['fn']:>9}{f['tp'] + f['fp']:>9}{f['tp']:>9}"
+          f"{f['fn']:>8}{f['fp']:>10}{fmt(f['precision']):>11}{fmt(f['recall']):>9}")
+
+    at = result["attribution"]
+    print(f"\nAttribution")
+    print(f"  {at['claimed']:,} attributions claimed against {at['true_links']:,} true links")
+    print(f"  correct {at['correct']:,}   wrong {at['wrong']:,}   missed {at['missed']:,}")
+    print(f"  precision {fmt(at['precision'])}   recall {fmt(at['recall'])}")
+    print(f"  traps taken {at['traps_taken']} of {at['traps_total']}")
+    if at["unknown_evidence_ids"]:
+        print(f"  {at['unknown_evidence_ids']:,} attributions name a source record with no")
+        print( "  ground-truth link. Only a sample of alerts was labelled, so these are")
+        print( "  neither right nor wrong: they are unscoreable, and a kit that emits many")
+        print( "  of them is guessing rather than inferring.")
+    if unresolved:
+        print(f"\n{len(unresolved)} subjects could not be resolved to anything in the world")
+        print("  Every one of these is counted as spurious. Check the identifier you emitted.")
+        for u in unresolved[:8]:
+            print(f"    {u}")
+
+    if traps_taken:
+        print(f"\nTraps taken, first {min(a.traps, len(traps_taken))}")
+        print("  These events are topically adjacent to the control they were attributed")
+        print("  to, and are not evidence for it. Falling for one is the failure mode this")
+        print("  environment exists to measure.")
+        for eid, said, actual in traps_taken[:a.traps]:
+            print(f"    {eid}  attributed to {said}, true attribution {actual}")
+
+    missing = [(k, claims[k]) for k in truth if k not in claimed]
+    if missing:
+        print(f"\nMissed, first 10 of {len(missing)}")
+        for (fam, kind, sid), claim in missing[:10]:
+            print(f"    {fam:<12} {kind}/{sid}  {claim}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

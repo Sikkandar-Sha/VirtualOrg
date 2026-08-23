@@ -4,16 +4,24 @@
 included.**
 
 [![licence](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
-[![checks](https://img.shields.io/badge/self--checks-80%20passing-brightgreen)](scripts/verify.py)
+[![checks](https://img.shields.io/badge/self--checks-88%20passing-brightgreen)](scripts/verify.py)
 [![boot](https://img.shields.io/badge/cold%20boot-~7s-brightgreen)](#run-it)
 [![lenses](https://img.shields.io/badge/vendor%20lenses-7-informational)](#the-seven-lenses)
 
+> **Everything in this world is invented.** The people, the machines, the CVE
+> identifiers, the findings. None of it describes any real organisation, and none of it
+> belongs in a real risk register. Read [DISCLAIMER.md](DISCLAIMER.md).
+
+![The Control Center status board](docs/screenshots/status.jpg)
+
 ## The problem
 
-You are building something that reads a SIEM, an ITSM, a GRC platform and a scanner
-over their APIs, and produces residual risk per service, control effectiveness, and a
-board-level posture score. To know whether it works, you need an enterprise to point it
-at. Every option is bad:
+You are building a security or risk product, increasingly one where a model does the
+reasoning: which detection evidences which control, which sources disagree, what the
+residual risk actually is. To know whether that reasoning is any good, you need an
+enterprise to point it at, and you need to know what the right answer was.
+
+Every option is bad:
 
 - **A real customer.** You cannot, and even if you could, nobody knows what the right
   answer was, so you cannot tell a good posture from a plausible one.
@@ -40,6 +48,8 @@ completely and truthfully, and make every tool a deliberately lossy *lens* over 
   All loss is applied at the lens, at read time. The world is never wrong.
 ```
 
+![One machine, as five lenses name it](docs/screenshots/one-entity-every-lens.jpg)
+
 Seven lenses. Five different names for the same machine, two more for the same person,
 and no lens that sees all of it. That is not an accident. **It is what manufactures the
 correlation, conflict and coverage-gap problems your product exists to solve.**
@@ -52,6 +62,8 @@ correlation, conflict and coverage-gap problems your product exists to solve.**
 **1,217 ground-truth assertions.** `world.expectation` says what your product should
 conclude, and what it should refuse to conclude. Four families: attribution, conflict,
 degradation, absence.
+
+![The assertion catalogue](docs/screenshots/ground-truth.jpg)
 
 **An answer key for attribution.** Nothing in any vendor API links a SIEM detection to a
 GRC control. That inference is your product's core job, and the thing most likely to be
@@ -206,6 +218,52 @@ curl -s -H "$H" -H 'X-VO-Profile: heavily-customized'  localhost:8080/servicenow
 **Passing all three profiles means the connector is deployable. Passing only
 `out-of-the-box` means it demos.**
 
+## Score your product against it
+
+VirtualOrg knows what should have been concluded. `scripts/score` reads what your
+product concluded and says how close it got.
+
+```bash
+python3 examples/reference-kit/kit.py > posture.json
+./scripts/score posture.json
+```
+
+```
+Findings   (attribution is scored separately, below)
+  family        expected  claimed  correct  missed  spurious  precision   recall
+  absence            238        3        3     235         0      1.000    0.013
+  conflict           105       59       59      46         0      1.000    0.562
+  degradation         12        0        0      12         0      0.000    0.000
+
+Attribution
+  459 attributions claimed against 5,023 true links
+  precision 0.138   recall 0.002
+  traps taken 12 of 773
+```
+
+The input contract is deliberately small, and findings match on the
+`(family, subject_kind, subject_id)` triple rather than on claim text, so this measures
+whether the right thing was found rather than how it was phrased:
+
+```json
+{
+  "meta": { "world_seed": 48392, "as_of": "2026-08-21", "generator_version": "2" },
+  "findings":     [{ "family": "conflict", "subject_kind": "control", "subject_id": "C-017" }],
+  "attributions": [{ "evidence_id": "ALR-009852", "control_id": "C-011" }]
+}
+```
+
+You emit whatever identifier the vendor API gave you. The scorer resolves `C-017`,
+`lt-4069.corp.local`, an agent uuid or a staff number back to the canonical entity,
+because that is the same entity-resolution problem your product had to solve and there
+is no reason to make you solve it twice. It refuses to score a posture produced from a
+different world.
+
+**`examples/reference-kit/`** is a small, readable consumer that produces one. It is
+deliberately naive: it attributes alerts to controls by matching words in the rule name
+against words in the control title, which is exactly the inference the 773 traps exist
+to punish. Its score above is what that approach is worth.
+
 ## Ground truth
 
 `world.expectation` is the assertion catalogue, materialised. Every row is something
@@ -322,6 +380,8 @@ Eight chapters at `/manual`, aimed at someone about to write a connector:
 | API reference | Every endpoint, read from the twin's own route table |
 | Correlation | One real machine as each lens names it, plus the traps |
 | Scoring | The four families, attribution precision/recall, assertion style per output |
+
+![What a connector can actually reach](docs/screenshots/what-you-can-reach.jpg)
 
 Every fact in it is generated: column names from `information_schema`, counts from the
 tables, the endpoint list from the twin's route table, example payloads from real calls to
@@ -460,6 +520,16 @@ contained by the binding, and `scripts/verify.py` asserts it by asking
 `docker compose config` what the daemon will actually do.
 
 Set `VO_BIND=0.0.0.0` if you deliberately want LAN access, knowing what you are sharing.
+
+## Documents
+
+| | |
+|---|---|
+| [DISCLAIMER.md](DISCLAIMER.md) | The world is fabricated. What that means for anything you compute from it. |
+| [SECURITY.md](SECURITY.md) | Why it ships credentials, why it binds loopback, how to report a problem. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | The one rule, the branch model, and how to add a lens. |
+| [CHANGELOG.md](CHANGELOG.md) | Releases, and **the world contract**: what reproduces a world and what invalidates a golden file. |
+| [DESIGN.md](DESIGN.md) | Why it is built this way. The rationale, not the runbook. |
 
 ## Licence
 

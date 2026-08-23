@@ -1,0 +1,36 @@
+name: Bug
+description: Something in VirtualOrg behaves differently from how it is documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please run `python3 scripts/verify.py`. It checks that the
+        conditions the ground truth claims exist are genuinely observable through the
+        vendor APIs, and it often identifies the problem for you.
+  - type: input
+    id: world
+    attributes:
+      label: World
+      description: The output of `curl -s localhost:8080/healthz`, or just the seed, as-of and generator_version.
+      placeholder: seed=48392 as_of=2026-08-21 scale=1.0 chaos=1 generator_version=2
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Paste the request and the response, or the failing check.
+    validations:
+      required: true
+  - type: textarea
+    id: verify
+    attributes:
+      label: Output of scripts/verify.py
+      render: text

@@ -27,7 +27,7 @@
     {% else %}
       <span class="ident">{{ b.external_id }}</span>
     {% endif %}
-    <span class="seen">{% if b.blind %}-{% else %}{{ b.stale_h }}h ago{% endif %}</span>
+    <span class="seen">{% if b.blind %}not seen{% else %}{{ b.stale }} ago{% endif %}</span>
     <span class="cov">
       <span class="pct">{{ (b.coverage * 100) | round | int }}%</span>
       <span class="bar">

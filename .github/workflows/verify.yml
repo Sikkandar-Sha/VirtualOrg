@@ -104,6 +104,13 @@ jobs:
           fi
           echo "clean: DESIGN.md keeps its own voice, everything else is free of it"
 
+      - name: The reference kit runs and can be scored
+        run: |
+          pip install --quiet httpx
+          python3 examples/reference-kit/kit.py > /tmp/posture.json
+          python3 -c "import json;d=json.load(open('/tmp/posture.json'));print(f'{len(d[\"findings\"])} findings, {len(d[\"attributions\"])} attributions')"
+          VO_CC_BASE=http://localhost:3000 ./scripts/score /tmp/posture.json
+
       - name: The chaos profile serves the happy path
         run: |
           docker compose --profile chaos up -d wiremock

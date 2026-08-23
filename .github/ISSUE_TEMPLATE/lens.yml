@@ -1,0 +1,35 @@
+name: Lens request
+description: Propose a vendor lens that does not exist yet
+labels: [lens]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A lens is a scope query, a loss profile and a response shape. Roughly a day's
+        work. See the "Adding a lens" section of CONTRIBUTING.md.
+  - type: input
+    id: vendor
+    attributes:
+      label: Vendor and product
+      placeholder: Wiz, cloud security posture
+    validations:
+      required: true
+  - type: textarea
+    id: loss
+    attributes:
+      label: Loss profile
+      description: Coverage, sync latency, retention, how it names things, and what it is structurally blind to. Be honest about the blind spot; it is the interesting part.
+    validations:
+      required: true
+  - type: textarea
+    id: pattern
+    attributes:
+      label: Connector pattern
+      description: Which of the seven patterns it uses, or a new one it would add.
+    validations:
+      required: true
+  - type: textarea
+    id: unlocks
+    attributes:
+      label: What it unlocks
+      description: Which entities become reachable, and which assertions become scoreable.
