@@ -33,8 +33,10 @@ DOMAINS = [
      ]),
     ("Assets and infrastructure", "The machines. Every one carries four identifiers, "
      "and each lens picks a different one — this is where correlation is manufactured.", [
-        ("asset", "Endpoints, servers, cloud. Carries hostname, fqdn, asset_tag and ip. "
-         "IPs are recycled: the pool is smaller than the asset count."),
+        ("asset", "Endpoints, servers, cloud. Carries four identifiers of its own — "
+         "hostname, fqdn, asset_tag and ip — and the EDR lens mints a fifth, an agent "
+         "id, which exists nowhere in the world. IPs are recycled: the pool is smaller "
+         "than the asset count."),
         ("software", "Packages, with an `eol_on` date. Past it means unsupported."),
         ("software_install", "Which package is on which machine."),
      ]),

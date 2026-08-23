@@ -193,7 +193,7 @@
 
 {% macro correlation(a, lenses) %}
 <svg viewBox="0 0 900 300" class="dgm" role="img"
-     aria-label="One machine named three different ways by three lenses, with no shared identifier between them">
+     aria-label="One machine named differently by each of {{ lenses | length }} lenses, with no shared identifier between them">
   <rect x="330" y="18" width="240" height="58" fill="var(--card)" stroke="var(--accent)" stroke-width="1.6"/>
   <text x="450" y="42" class="d-t d-mid" fill="var(--accent)">{{ a.id }}</text>
   <text x="450" y="62" class="d-s d-mid">one machine in the world</text>

@@ -71,6 +71,25 @@ jobs:
           [ $fail = 0 ] && echo "no page renders a credential"
           exit $fail
 
+      - name: Rendered counts match the live world
+        run: |
+          # "Three views, one world" was written when there were three lenses and
+          # silently became wrong at four. Any prose that states a count must read it.
+          python3 - <<'EOF'
+          import json, re, sys, urllib.request
+          def get(u):
+              return urllib.request.urlopen(u, timeout=20).read().decode()
+          live = len(json.loads(get("http://localhost:8080/healthz"))["lenses"])
+          words = {"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,
+                   "seven":7,"eight":8,"nine":9,"ten":10}
+          h1 = re.search(r"<h1>([^<]*)</h1>", get("http://localhost:3000/lenses")).group(1)
+          claimed = words.get(h1.split()[0].lower())
+          print(f"lens page says {h1!r}; the world has {live} lenses")
+          if claimed != live:
+              sys.exit(f"FAIL: page claims {claimed}, world has {live}")
+          print("counts agree")
+          EOF
+
       - name: The chaos profile serves the happy path
         run: |
           docker compose --profile chaos up -d wiremock

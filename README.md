@@ -310,7 +310,7 @@ them, for the same reason.
 
 ### The manual (surface 7)
 
-Seven chapters at `/manual`, aimed at someone about to write a connector:
+Eight chapters at `/manual`, aimed at someone about to write a connector:
 
 | Chapter | Answers |
 |---|---|
@@ -397,7 +397,7 @@ served live and surfaced on the Control Center status board:
 curl -s localhost:8080/_provenance | python3 -m json.tool
 ```
 
-**All five lenses are `unverified`.** Every response shape was written from our
+**All seven lenses are `unverified`.** Every response shape was written from our
 understanding of documented behaviour, and no vendor artefact was captured. `status` is
 derived, never asserted: it requires a trustworthy basis for every endpoint *and* a
 capture date. Passing tests here show the kit agrees with this environment, not that

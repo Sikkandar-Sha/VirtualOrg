@@ -53,6 +53,15 @@ def world_now():
 # which keeps them copy-pasteable without putting a token on the page.
 TOKEN_PLACEHOLDER = "$VO_TOKEN"
 
+# Prose that states a count has to read the count. "Three views, one world" was
+# written when there were three lenses and quietly became wrong at four.
+NUMBER_WORDS = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six",
+                7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve"}
+
+
+def spell(n):
+    return NUMBER_WORDS.get(n, str(n))
+
 
 def asset_version():
     """mtime of the stylesheet, so the browser never serves a stale one."""
@@ -148,7 +157,9 @@ def spine_control(request: Request, control_id: str):
 # -------------------------------------------------------- surface 3: the lenses
 @app.get("/lenses")
 def lens_index(request: Request):
-    return page(request, "lens_index.html", lenses=Q.lenses(), counts=Q.lens_entity_counts())
+    lenses = Q.lenses()
+    return page(request, "lens_index.html", lenses=lenses, n_lenses=spell(len(lenses)),
+                counts=Q.lens_entity_counts())
 
 
 TRY_IT = {
