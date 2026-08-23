@@ -279,7 +279,7 @@ details.tbl > .wrap { padding: 4px 0 20px 196px; margin-top: 0; }
 .dgm text { font-family: var(--ui); fill: var(--ink); }
 .dgm .d-t { font-size: 13px; font-weight: 500; }
 .dgm .d-s { font-size: 11px; }
-.dgm .d-id { font-family: var(--mono); font-size: 12.5px; }
+.dgm .d-id { font-family: var(--mono); font-size: 11.5px; }  /* MONO_PX in app.py */
 .dgm .d-mid { text-anchor: middle; }
 
 /* ── responsive ────────────────────────────────────────────────────────── */

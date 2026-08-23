@@ -393,8 +393,16 @@ def manual(request: Request, ch: str = "overview"):
         # Geometry is computed from the content, not guessed. A fixed box height
         # with a variable-length list is why text used to spill through the border,
         # and truncating the list to fit hid data rather than showing it.
-        BOX_W, WRAP = 300, 43           # 272px of inner width at 10.5px monospace
-        PAD_T, H_VENDOR, H_LOSS, H_LABEL, H_LINE, PAD_B = 16, 20, 18, 18, 14, 16
+        # One source of truth for the type metrics. The previous version wrapped for
+        # 10.5px monospace while the stylesheet rendered 12.5px, so every line was
+        # 20% wider than the box it had to sit in. MONO_PX must match
+        # `.dgm .d-id` in app.css.
+        MONO_PX = 11.5
+        CHAR_W = MONO_PX * 0.60          # monospace advance is 0.6em
+        BOX_W, PAD_X = 340, 14
+        USABLE = BOX_W - 2 * PAD_X
+        WRAP = int(USABLE // CHAR_W)
+        PAD_T, H_VENDOR, H_LOSS, H_LABEL, H_LINE, PAD_B = 16, 20, 18, 18, 15, 16
         GAP, TOP = 18, 16
 
         lo = M.lens_objects()
@@ -405,16 +413,21 @@ def manual(request: Request, ch: str = "overview"):
             sync = (f"{mins} min" if mins < 60 else
                     f"{mins // 60}h" if mins < 1440 else f"{mins // 1440}d")
             lines = textwrap.wrap(", ".join(lo.get(l["id"], [])) or "nothing", WRAP)
+            loss = (f'{int(round(l["coverage"] * 100))}% cover · '
+                    f'{l["identifier_style"]} · {sync} behind')
+            # Nothing may be wider than the box. If it is, that is a layout bug and
+            # should be visible here rather than as text crossing a border.
+            widest = max([len(loss)] + [len(x) for x in lines])
+            assert widest <= WRAP, f"{l['id']}: {widest} chars exceeds {WRAP}"
             h = PAD_T + H_VENDOR + H_LOSS + H_LABEL + H_LINE * len(lines) + PAD_B
             rows.append({
-                "vendor": l["vendor"], "cat": l["category"],
-                "loss": f'{int(round(l["coverage"] * 100))}% cover · by {l["identifier_style"]} · {sync} behind',
+                "vendor": l["vendor"], "cat": l["category"], "loss": loss,
                 "lines": lines, "y": y, "h": h, "mid": y + h // 2,
             })
             y += h + GAP
 
         ctx.update(inventory=M.world_inventory(), lens_rows=rows,
-                   geom={"box_x": 300, "box_w": BOX_W, "pad_t": PAD_T,
+                   geom={"box_x": 272, "box_w": BOX_W, "pad_t": PAD_T,
                          "h_vendor": H_VENDOR, "h_loss": H_LOSS, "h_label": H_LABEL,
                          "h_line": H_LINE, "top": TOP,
                          "bottom": y - GAP, "svg_h": y - GAP + 46,
