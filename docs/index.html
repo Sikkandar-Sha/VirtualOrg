@@ -134,15 +134,20 @@ footer a{color:var(--ink-2)}
 <section>
   <div class="wrap">
     <div class="eyebrow">The problem</div>
-    <h2>You cannot test a posture engine without an enterprise, and every enterprise you can get is wrong</h2>
-    <p class="lead">You are building something that reads a SIEM, an ITSM, a GRC platform
-      and a scanner over their APIs, and produces residual risk per service, control
-      effectiveness, and a board-level score. To know whether it works, you need
-      somewhere to point it.</p>
+    <h2>You cannot test it without an enterprise, and every enterprise you can get is wrong</h2>
+    <p class="lead">You are building something that reads an enterprise. An
+      attack-surface tool, a detection-engineering platform, a CSPM, a vulnerability
+      manager, an identity-governance product, a compliance engine, an asset
+      reconciler, a SOC copilot. Increasingly one where a model does the reasoning:
+      which detection evidences which control, which source is stale, which two
+      records are the same machine, what is actually exposed.</p>
+    <p class="lead">Your product is only as good as its ability to make sense of
+      several systems that disagree. Testing that needs two things at once: an
+      enterprise to point it at, and knowledge of what the right answer was.</p>
     <div class="scroll"><table>
       <tr><th>Option</th><th>Why it fails</th></tr>
       <tr><td>A real customer</td><td>You cannot. And even if you could, nobody knows what
-        the right answer was, so you cannot tell a good posture from a plausible one.</td></tr>
+        the right answer was, so you cannot tell a correct conclusion from a plausible one.</td></tr>
       <tr><td>A demo dataset</td><td>Clean, consistent, complete. It never exercises
         correlation, conflict or coverage gaps, which are the only hard parts.</td></tr>
       <tr><td>Real products in a lab</td><td>Months of work, no ARM64 images for several,
@@ -162,7 +167,7 @@ footer a{color:var(--ink-2)}
 
     <figure>
       <svg class="dgm" viewBox="0 0 900 430" role="img"
-           aria-label="One database projected through seven lossy vendor lenses into your kit">
+           aria-label="One database projected through seven lossy vendor lenses into the product under test">
         <defs>
           <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
             <path d="M0,0 L0,6 L8,3 z" fill="var(--rule-2)"/></marker>
