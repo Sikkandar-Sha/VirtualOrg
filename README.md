@@ -1,7 +1,10 @@
 <h1>VirtualOrg</h1>
 
-**A synthetic enterprise for testing products, with the answer key
-included.**
+**Point any security product at a full enterprise. Then find out what it got
+right.**
+
+300 assets, 500 people, seven vendor APIs that disagree on purpose, and the answer key
+included so you can score what your product concluded.
 
 [![licence](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
 [![checks](https://img.shields.io/badge/self--checks-103%20passing-brightgreen)](scripts/verify.py)
@@ -16,10 +19,15 @@ included.**
 
 ## The problem
 
-You are building a security or risk product, increasingly one where a model does the
-reasoning: which detection evidences which control, which sources disagree, what the
-residual risk actually is. To know whether that reasoning is any good, you need an
-enterprise to point it at, and you need to know what the right answer was.
+You are building something that reads an enterprise. An attack-surface tool, a
+detection-engineering platform, a CSPM, a vulnerability manager, an identity-governance
+product, a compliance engine, an asset-inventory reconciler, a SOC copilot. Increasingly
+one where a model does the reasoning: which detection evidences which control, which
+source is stale, which two records are the same machine, what is actually exposed.
+
+They all share a problem. Your product is only as good as its ability to make sense of
+several systems that disagree, and to test that you need two things at once: an
+enterprise to point it at, and knowledge of what the right answer was.
 
 Every option is bad:
 
@@ -35,6 +43,9 @@ Every option is bad:
 Your product calls an endpoint and receives JSON. **It cannot tell whether that JSON
 came from a real product or a database query.** So model the enterprise once,
 completely and truthfully, and make every tool a deliberately lossy *lens* over it.
+
+You point your product at as many of those lenses as it consumes, and compare what it
+concluded against what is true. The world knows the answer, because it wrote it.
 
 ```
                     ┌── ServiceNow   97% · by fqdn      · 1d behind
@@ -88,6 +99,8 @@ real OAuth, and an adversarial proxy that returns 429s and expired tokens on dem
 |---|---|
 | **Writing connectors** | Seven live API patterns: async job, cursor, offset, Link header, page number, incremental `since` and query-then-hydrate, plus binary evidence retrieval behind a second credential |
 | **Testing entity resolution** | One machine under five identifiers, recycled IPs so the IP is not a key, and one join that *does* work so you can tell the difference |
+| **Testing an AI agent** | A world it cannot have memorised, with traps that punish a plausible-sounding answer and ground truth that scores it |
+| **Finding coverage gaps** | Assets no security lens can see, people HR knows about and the directory does not, and the reverse |
 | **Guarding against regressions** | A deterministic world and a restorable baseline, so any posture delta is a real finding |
 | **Scoring inference quality** | 5,002 true evidence links and 734 deliberate decoys |
 | **Proving deployability** | Three customer schema profiles on the ServiceNow lens. Passing all three means the connector ships. Passing only `out-of-the-box` means it demos |
