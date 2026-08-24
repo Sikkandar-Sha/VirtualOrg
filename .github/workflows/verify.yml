@@ -120,9 +120,20 @@ jobs:
           # project and nothing in it should credit or name the tooling used to write
           # it. Covers tracked file content, commit messages and commit trailers.
           # Patterns are assembled at runtime so this file does not trip its own check.
-          A=$(printf 'cl''aude'); B=$(printf 'anthro''pic'); C=$(printf 'co-auth''ored-by')
-          D=$(printf 'open''ai'); E=$(printf 'chat''gpt'); F=$(printf 'co''pilot')
-          PAT="$A|$B|$C|$D|$E|$F"
+          # Vendor names only. Two deliberate narrowings, both learned by this guard
+          # failing on correct writing:
+          #   `co``pilot` is qualified, because "SOC copilot" is ordinary product
+          #   vocabulary in this domain, and a bare match rejects a true sentence.
+          #   `Co-Auth``ored-By` is qualified too: it is a standard git trailer for
+          #   human pair programming, and a contributor using it properly must not be
+          #   blocked. Only a trailer naming an AI vendor is attribution.
+          # A guard that fires on legitimate work gets disabled by whoever it blocks,
+          # which leaves you worse off than no guard at all.
+          A=$(printf 'cl''aude'); B=$(printf 'anthro''pic'); D=$(printf 'open''ai')
+          E=$(printf 'chat''gpt'); F=$(printf 'github co''pilot')
+          C=$(printf 'co-auth''ored-by:.*(cl''aude|anthro''pic|open''ai|co''pilot|\\bai\\b)')
+          G=$(printf '(generated|written|authored) (with|by) (an? )?(ai|cl''aude|llm)')
+          PAT="$A|$B|$C|$D|$E|$F|$G"
           hits=$(git ls-files | xargs grep -IlEi "$PAT" 2>/dev/null || true)
           if [ -n "$hits" ]; then
             echo "authoring-tool reference found in:"; echo "$hits"
