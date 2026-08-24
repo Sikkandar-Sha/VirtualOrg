@@ -30,6 +30,15 @@ git checkout dev && git push
 git checkout main && git merge --ff-only dev && git push
 ```
 
+That is the maintainer's path. **If you are contributing, you do not need it**: fork
+the repository, branch from `dev`, and open a pull request back into `dev`.
+
+`main` is protected and will reject a direct push. It requires a pull request with one
+approval, a passing `verify` run that is up to date with the branch, a linear history,
+and resolved review conversations. Force pushes and branch deletion are refused. Those
+rules exist so that the answer key and the self-checks cannot be changed without a
+green run proving the world still reproduces.
+
 ## Before you open a pull request
 
 ```bash

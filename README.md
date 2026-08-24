@@ -565,6 +565,11 @@ git checkout dev && git push                 # day to day
 git checkout main && git merge --ff-only dev && git push   # when it is ready
 ```
 
+`main` is protected: it requires a passing `verify` run and a linear history, and it
+refuses force pushes and deletion. If you are contributing rather than maintaining,
+open a pull request against `dev` and let CI run. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 CI runs on both: it boots the whole environment, runs the 103 self-checks, loads every
 Control Center surface, exercises the chaos proxy and real OAuth, and regenerates the
 world twice to prove determinism.
